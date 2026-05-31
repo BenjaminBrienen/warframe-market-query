@@ -1,34 +1,44 @@
-use serde::Deserialize;
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
-// Generic envelope
+// Generic API envelopes
 // ---------------------------------------------------------------------------
 
+/// Standard v2 response wrapper.
 #[derive(Deserialize)]
 pub struct ApiResponse<T> {
     pub data: T,
 }
 
+/// v1 endpoints wrap results in `payload` instead.
+#[derive(Deserialize)]
+pub struct V1DropSourcesResponse {
+    pub payload: V1DropSourcesPayload,
+}
+
+#[derive(Deserialize)]
+pub struct V1DropSourcesPayload {
+    pub dropsources: Vec<DropSource>,
+}
+
 // ---------------------------------------------------------------------------
-// Items
+// Items  (GET /v2/items)
 // ---------------------------------------------------------------------------
 
-/// Minimal item record returned by GET /v2/items.
-/// Fields use `default` so they deserialise to None / empty if absent.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ItemShort {
     pub id: String,
     pub slug: String,
     #[serde(default)]
     pub tags: Vec<String>,
-    /// Ducat trade-in value. Only present on prime parts.
+    /// Ducat trade-in value — only present on prime parts.
     #[serde(default)]
     pub ducats: Option<u32>,
-    pub i18n: Option<I18nMap>,
+    pub i18n: Option<ItemI18nMap>,
 }
 
 impl ItemShort {
-    /// Human-readable English name, falling back to the slug.
     pub fn name(&self) -> &str {
         self.i18n
             .as_ref()
@@ -37,21 +47,115 @@ impl ItemShort {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct I18nMap {
-    pub en: I18nEntry,
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ItemI18nMap {
+    pub en: ItemI18nEntry,
 }
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct I18nEntry {
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ItemI18nEntry {
     pub name: String,
 }
 
 // ---------------------------------------------------------------------------
-// Orders
+// Locations  (GET /v2/locations)
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Location {
+    pub id: String,
+    pub slug: String,
+    #[serde(default)]
+    pub faction: Option<String>,
+    #[serde(default)]
+    pub min_level: Option<i32>,
+    #[serde(default)]
+    pub max_level: Option<i32>,
+    #[serde(default)]
+    pub i18n: Option<HashMap<String, LocationI18n>>,
+}
+
+impl Location {
+    pub fn node_name(&self) -> Option<&str> {
+        self.i18n.as_ref()?.get("en").map(|e| e.node_name.as_str())
+    }
+    pub fn system_name(&self) -> Option<&str> {
+        self.i18n.as_ref()?.get("en")?.system_name.as_deref()
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationI18n {
+    pub node_name: String,
+    #[serde(default)]
+    pub system_name: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Missions  (GET /v2/missions)
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct Mission {
+    pub id: String,
+    pub slug: String,
+    #[serde(default)]
+    pub i18n: Option<HashMap<String, MissionI18n>>,
+}
+
+impl Mission {
+    pub fn name(&self) -> Option<&str> {
+        self.i18n.as_ref()?.get("en").map(|e| e.name.as_str())
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct MissionI18n {
+    pub name: String,
+}
+
+// ---------------------------------------------------------------------------
+// Drop sources  (GET /v1/items/{slug}/dropsources)
+// ---------------------------------------------------------------------------
+
+/// Unified struct for both drop-source shapes:
+///
+/// type = "relic"   → prime part found inside a relic
+///   fields: relic (relic item-id), rates
+///
+/// type = "mission" → relic/item found in a mission rotation
+///   fields: location, mission, rate, rarity, rotation (optional)
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct DropSource {
+    #[serde(rename = "type")]
+    pub source_type: String,
+    pub item: String,
+    // relic-type fields
+    pub relic: Option<String>,
+    pub rates: Option<RelicRates>,
+    // mission-type fields
+    pub location: Option<String>,
+    pub mission: Option<String>,
+    pub rate: Option<f32>,
+    pub rarity: Option<String>,
+    pub rotation: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct RelicRates {
+    pub intact: f32,
+    pub exceptional: f32,
+    pub flawless: f32,
+    pub radiant: f32,
+}
+
+// ---------------------------------------------------------------------------
+// Orders  (GET /v2/orders/item/{slug})
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderWithUser {
     pub id: String,
@@ -62,7 +166,7 @@ pub struct OrderWithUser {
     pub user: UserShort,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UserShort {
     pub ingame_name: String,

@@ -1511,13 +1511,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "wfm"
+name = "wfmq"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "reqwest",
  "serde",
+ "serde_json",
  "tokio",
 ]
 

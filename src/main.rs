@@ -1,14 +1,21 @@
+mod analysis;
 mod api;
+mod cache;
 mod client;
+mod config;
+mod data;
 mod models;
 
 use std::collections::HashMap;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Args, Parser, Subcommand};
 
+use analysis::RelicValue;
 use client::RateLimitedClient;
-use models::ItemShort;
+use config::Config;
+use data::DataStore;
+use models::DropSource;
 
 // ---------------------------------------------------------------------------
 // CLI definition
@@ -16,8 +23,8 @@ use models::ItemShort;
 
 #[derive(Parser)]
 #[command(
-    name = "wfm",
-    about = "Search warframe.market orders. Always filters for in-game sellers."
+    name = "wfmq",
+    about = "warframe.market query tool — always filters for in-game sellers."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -26,44 +33,71 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Search orders by price, quantity, and item tags
+    /// Refresh the local static-data cache (items, locations, missions, dropsources).
+    /// Run this the first time and after major game updates.
+    Update(UpdateArgs),
+
+    /// Search sell/buy orders by price, quantity, and item tags.
     Search(SearchArgs),
-    /// Find sellers with enough ducat-efficient items to be worth a single trade
+
+    /// Find sellers who have enough ducat-efficient items to justify one trade slot.
     Ducats(DucatsArgs),
+
+    /// Show the best mission locations/rotations for farming ducats.
+    /// Requires the cache to be populated first (`wfmq update`).
+    Locations(LocationsArgs),
 }
+
+// ---- update ----------------------------------------------------------------
+
+#[derive(Args)]
+struct UpdateArgs {
+    /// Re-fetch dropsource files even when they are already cached.
+    #[arg(long)]
+    force: bool,
+}
+
+// ---- search ----------------------------------------------------------------
 
 #[derive(Args)]
 struct SearchArgs {
-    /// Order type to search: sell or buy
     #[arg(long = "type", default_value = "sell")]
     order_type: String,
 
-    /// Maximum platinum price (inclusive)
+    /// Maximum platinum price (inclusive).
     #[arg(long)]
     platinum: Option<u32>,
 
-    /// Minimum quantity per order (inclusive)
+    /// Minimum quantity (inclusive).
     #[arg(long)]
     quantity: Option<u32>,
 
-    /// Comma-separated item tags to filter by (all must match).
-    /// Examples: --tags prime   --tags prime,relic
+    /// Comma-separated item tags that must ALL match.  E.g. --tags prime,relic
     #[arg(long)]
     tags: Option<String>,
 }
 
+// ---- ducats ----------------------------------------------------------------
+
 #[derive(Args)]
 struct DucatsArgs {
-    /// Minimum ducats-per-platinum ratio a listing must meet.
-    /// E.g. --ratio 15 means the item must yield ≥15 ducats per platinum spent.
+    /// Minimum ducats-per-platinum ratio.  E.g. --ratio 15 → ≥15 ducats/plat.
     #[arg(long)]
     ratio: f32,
 
-    /// Minimum total quantity a seller must have available across all qualifying
-    /// listings before they are shown. Lets you avoid burning a daily trade slot
-    /// on a seller who only has one or two cheap items.
+    /// Minimum total item-units a seller must have available across all
+    /// qualifying listings.  Prevents wasting a daily trade slot.
     #[arg(long, default_value = "6")]
     quantity: u32,
+}
+
+// ---- locations -------------------------------------------------------------
+
+#[derive(Args)]
+struct LocationsArgs {
+    /// Number of results to display.
+    #[arg(long, default_value = "25")]
+    limit: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -73,29 +107,125 @@ struct DucatsArgs {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    let config = Config::load();
     let client = RateLimitedClient::new();
 
     match cli.command {
-        Commands::Search(args) => run_search(args, &client).await,
-        Commands::Ducats(args) => run_ducats(args, &client).await,
+        Commands::Update(args)    => run_update(args, &client, &config).await,
+        Commands::Search(args)    => run_search(args, &client, &config).await,
+        Commands::Ducats(args)    => run_ducats(args, &client, &config).await,
+        Commands::Locations(args) => run_locations(args, &client, &config).await,
     }
 }
 
 // ---------------------------------------------------------------------------
-// search subcommand
+// update
 // ---------------------------------------------------------------------------
 
-async fn run_search(args: SearchArgs, client: &RateLimitedClient) -> Result<()> {
+async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Config) -> Result<()> {
+    // -- Quick single-call endpoints ----------------------------------------
+    eprintln!("📦 Fetching items...");
+    let items = api::get_items(client).await?;
+    cache::write(&cache::items_path(), &items)?;
+
+    eprintln!("🌍 Fetching locations...");
+    let locations = api::get_locations(client).await?;
+    cache::write(&cache::locations_path(), &locations)?;
+
+    eprintln!("🎯 Fetching missions...");
+    let missions = api::get_missions(client).await?;
+    cache::write(&cache::missions_path(), &missions)?;
+
+    // -- Dropsource targets -------------------------------------------------
+    let prime_parts: Vec<_> = items.iter().filter(|i| i.ducats.unwrap_or(0) > 0).collect();
+    let relics: Vec<_>      = items.iter().filter(|i| i.tags.contains(&"relic".to_string())).collect();
+
+    eprintln!(
+        "📊 {} prime parts, {} relics identified.",
+        prime_parts.len(),
+        relics.len()
+    );
+
+    // Combine into one target list; deduplicate by slug just in case.
+    let mut targets: Vec<&models::ItemShort> = Vec::new();
+    for item in prime_parts.iter().chain(relics.iter()) {
+        if !targets.iter().any(|t| t.slug == item.slug) {
+            targets.push(item);
+        }
+    }
+
+    let to_fetch: Vec<_> = if args.force {
+        targets.iter().copied().collect()
+    } else {
+        targets
+            .iter()
+            .copied()
+            .filter(|item| !cache::dropsources_path(&item.slug).exists())
+            .collect()
+    };
+
+    if to_fetch.is_empty() {
+        eprintln!("✅ All dropsource files already cached (use --force to refresh).");
+    } else {
+        let eta = to_fetch.len() as f32 * 0.334;
+        eprintln!(
+            "⬇️  Fetching dropsources for {} items (~{:.0}s at rate limit)...",
+            to_fetch.len(),
+            eta
+        );
+
+        for (i, item) in to_fetch.iter().enumerate() {
+            if (i + 1) % 50 == 0 || i + 1 == to_fetch.len() {
+                eprintln!("  [{}/{}]", i + 1, to_fetch.len());
+            }
+            match api::get_dropsources(client, &item.slug).await {
+                Ok(sources) => {
+                    let _ = cache::write(&cache::dropsources_path(&item.slug), &sources);
+                }
+                Err(e) => {
+                    eprintln!("  ⚠ {} — {e}", item.slug);
+                }
+            }
+        }
+    }
+
+    // -- Compute & cache relic values ---------------------------------------
+    eprintln!("🪙 Computing expected ducat values per relic...");
+
+    let mut dropsources_by_slug: HashMap<String, Vec<DropSource>> = HashMap::new();
+    for part in &prime_parts {
+        if let Some(sources) = cache::read::<Vec<DropSource>>(&cache::dropsources_path(&part.slug)) {
+            dropsources_by_slug.insert(part.slug.clone(), sources);
+        }
+    }
+
+    let relic_values = analysis::build_relic_values(&prime_parts, &dropsources_by_slug);
+    cache::write(&cache::ducats_per_relic_path(), &relic_values)?;
+
+    eprintln!(
+        "✅ Update complete — {} relics valued, data written to ./data/",
+        relic_values.len()
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// search
+// ---------------------------------------------------------------------------
+
+async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
+    let store = DataStore::new(client, config);
+
     let required_tags: Vec<String> = args
         .tags
         .as_deref()
         .map(|t| t.split(',').map(|s| s.trim().to_lowercase()).collect())
         .unwrap_or_default();
 
-    eprintln!("📦 Fetching item list...");
-    let all_items = api::get_items(client).await?;
-
-    let items: Vec<_> = all_items
+    eprintln!("📦 Loading item list...");
+    let items: Vec<_> = store
+        .items()
+        .await?
         .into_iter()
         .filter(|item| {
             required_tags.is_empty()
@@ -107,25 +237,21 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient) -> Result<()> 
     eprintln!("🔍 Scanning {} items (~{:.0}s)...", items.len(), eta);
 
     let mut hits = 0usize;
-
     for (i, item) in items.iter().enumerate() {
         if (i + 1) % 50 == 0 || i + 1 == items.len() {
             eprintln!("  [{}/{}] scanned", i + 1, items.len());
         }
 
-        let orders = match api::get_orders(client, &item.slug).await {
+        let orders = match store.orders(&item.slug).await {
             Ok(o) => o,
-            Err(e) => {
-                eprintln!("  ⚠ skipping {} — {}", item.slug, e);
-                continue;
-            }
+            Err(e) => { eprintln!("  ⚠ {}: {e}", item.slug); continue; }
         };
 
         for order in &orders {
-            if order.user.status != "ingame" { continue; }
-            if order.order_type != args.order_type { continue; }
+            if order.user.status != "ingame"           { continue; }
+            if order.order_type != args.order_type     { continue; }
             if args.platinum.is_some_and(|max| order.platinum > max) { continue; }
-            if args.quantity.is_some_and(|min| order.quantity < min) { continue; }
+            if args.quantity.is_some_and(|min| order.quantity < min)  { continue; }
 
             hits += 1;
             println!(
@@ -146,36 +272,33 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient) -> Result<()> 
 }
 
 // ---------------------------------------------------------------------------
-// ducats subcommand
+// ducats
 // ---------------------------------------------------------------------------
 
-/// One qualifying listing collected during the scan.
 struct Hit {
-    item: ItemShort,
-    platinum: u32,
-    quantity: u32,
-    ducats: u32,
+    item_name: String,
+    platinum:  u32,
+    quantity:  u32,
+    ducats:    u32,
 }
 
-async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient) -> Result<()> {
-    eprintln!("📦 Fetching item list...");
-    let all_items = api::get_items(client).await?;
+async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
+    let store = DataStore::new(client, config);
 
-    // Only prime parts have ducat value.
+    eprintln!("📦 Loading item list...");
+    let all_items = store.items().await?;
+
     let ducat_items: Vec<_> = all_items
         .into_iter()
-        .filter(|item| item.ducats.unwrap_or(0) > 0)
+        .filter(|i| i.ducats.unwrap_or(0) > 0)
         .collect();
 
     let eta = ducat_items.len() as f32 * 0.334;
     eprintln!(
         "🪙 Scanning {} ducat items at ratio ≥{} (~{:.0}s)...",
-        ducat_items.len(),
-        args.ratio,
-        eta
+        ducat_items.len(), args.ratio, eta
     );
 
-    // ingame_name -> list of qualifying listings from that seller.
     let mut by_seller: HashMap<String, Vec<Hit>> = HashMap::new();
 
     for (i, item) in ducat_items.iter().enumerate() {
@@ -184,42 +307,32 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient) -> Result<()> 
         }
 
         let ducats = item.ducats.unwrap_or(0);
-
-        let orders = match api::get_orders(client, &item.slug).await {
+        let orders = match store.orders(&item.slug).await {
             Ok(o) => o,
-            Err(e) => {
-                eprintln!("  ⚠ skipping {} — {}", item.slug, e);
-                continue;
-            }
+            Err(e) => { eprintln!("  ⚠ {}: {e}", item.slug); continue; }
         };
 
         for order in orders {
-            if order.order_type != "sell" { continue; }
-            if order.user.status != "ingame" { continue; }
-            if order.platinum == 0 { continue; }
+            if order.order_type != "sell"       { continue; }
+            if order.user.status != "ingame"    { continue; }
+            if order.platinum == 0              { continue; }
+            if (ducats as f32 / order.platinum as f32) < args.ratio { continue; }
 
-            let ratio = ducats as f32 / order.platinum as f32;
-            if ratio < args.ratio { continue; }
-
-            by_seller
-                .entry(order.user.ingame_name.clone())
-                .or_default()
-                .push(Hit {
-                    item: item.clone(),
-                    platinum: order.platinum,
-                    quantity: order.quantity,
-                    ducats,
-                });
+            by_seller.entry(order.user.ingame_name.clone()).or_default().push(Hit {
+                item_name: item.name().to_owned(),
+                platinum:  order.platinum,
+                quantity:  order.quantity,
+                ducats,
+            });
         }
     }
 
-    // Only keep sellers whose combined available quantity meets the threshold.
     let mut qualified: Vec<(String, Vec<Hit>)> = by_seller
         .into_iter()
         .filter(|(_, hits)| hits.iter().map(|h| h.quantity).sum::<u32>() >= args.quantity)
         .collect();
 
-    // Sort by total ducats-per-platinum value descending so the best deals come first.
+    // Sort by weighted ducat efficiency descending.
     qualified.sort_by(|(_, a), (_, b)| {
         let score = |hits: &[Hit]| -> f32 {
             hits.iter()
@@ -232,32 +345,95 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient) -> Result<()> 
     eprintln!("✅ {} seller(s) qualify.\n", qualified.len());
 
     for (username, hits) in &qualified {
-        // Build the item portion of the message.
-        let item_parts: Vec<String> = hits
-            .iter()
-            .map(|h| format!("{}x {} ({}p)", h.quantity, h.item.name(), h.platinum))
-            .collect();
-
-        let body = item_parts.join(", ");
-        let msg = format!("/w {username} Hi! I'd like to buy: {body} (warframe.market)");
-
-        // Warframe chat messages are capped at ~255 characters.
-        if msg.len() > 255 {
-            eprintln!(
-                "⚠  Message for {username} is {} chars — Warframe may truncate it.",
-                msg.len()
-            );
-        }
-
-        // Print a summary header to stderr so stdout stays pipe-friendly.
-        let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
+        let total_qty:    u32 = hits.iter().map(|h| h.quantity).sum();
+        let total_plat:   u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
         let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
-        let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
         eprintln!(
             "👤 {username} — {total_qty} items, {total_plat}p total, ~{total_ducats} ducats"
         );
 
+        let item_parts: Vec<String> = hits
+            .iter()
+            .map(|h| format!("{}x {} ({}p)", h.quantity, h.item_name, h.platinum))
+            .collect();
+
+        let msg = format!(
+            "/w {username} Hi! I'd like to buy: {} (warframe.market)",
+            item_parts.join(", ")
+        );
+
+        if msg.len() > 255 {
+            eprintln!(
+                "  ⚠  Message is {} chars — Warframe may truncate it.",
+                msg.len()
+            );
+        }
+
         println!("{msg}");
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// locations
+// ---------------------------------------------------------------------------
+
+async fn run_locations(args: LocationsArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
+    let store = DataStore::new(client, config);
+
+    // These three are quick and auto-fetch if needed.
+    eprintln!("📦 Loading game data...");
+    let items     = store.items().await?;
+    let locs_list = store.locations().await?;
+    let mis_list  = store.missions().await?;
+
+    // Relic values must have been built by `update`.
+    let relic_values: HashMap<String, RelicValue> = match cache::read(&cache::ducats_per_relic_path()) {
+        Some(v) => v,
+        None => bail!(
+            "No relic value cache found. Please run `wfmq update` first to populate drop-source data."
+        ),
+    };
+
+    let relics: Vec<_> = items.iter().filter(|i| i.tags.contains(&"relic".to_string())).collect();
+    eprintln!("🗺️  Loading dropsources for {} relics...", relics.len());
+
+    let mut relic_dropsources: HashMap<String, Vec<DropSource>> = HashMap::new();
+    let mut missing = 0usize;
+
+    for relic in &relics {
+        match store.dropsources_cached(&relic.slug) {
+            Some(sources) => { relic_dropsources.insert(relic.slug.clone(), sources); }
+            None          => { missing += 1; }
+        }
+    }
+
+    if missing > 0 {
+        eprintln!(
+            "  ⚠  Dropsource data missing for {missing} relics — run `wfmq update` to populate."
+        );
+    }
+
+    // Build lookup maps keyed by ID.
+    let locations_map: HashMap<String, _> =
+        locs_list.into_iter().map(|l| (l.id.clone(), l)).collect();
+    let missions_map: HashMap<String, _> =
+        mis_list.into_iter().map(|m| (m.id.clone(), m)).collect();
+
+    let scores = analysis::build_mission_scores(&relics, &relic_dropsources, &relic_values);
+
+    // Filter out entries where we couldn't resolve at least the location name.
+    let resolved: Vec<_> = scores
+        .iter()
+        .filter(|s| locations_map.contains_key(&s.location_id))
+        .collect();
+
+    let total = resolved.len();
+    eprintln!("🏆 Showing top {} of {} location/rotation combinations (intact relics):\n", args.limit.min(total), total);
+
+    for score in resolved.iter().take(args.limit) {
+        println!("{}", analysis::format_score(score, &locations_map, &missions_map));
     }
 
     Ok(())
