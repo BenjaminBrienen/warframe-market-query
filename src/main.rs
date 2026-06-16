@@ -17,9 +17,7 @@ use config::Config;
 use data::DataStore;
 use models::DropSource;
 
-// ---------------------------------------------------------------------------
 // CLI definition
-// ---------------------------------------------------------------------------
 
 #[derive(Parser)]
 #[command(
@@ -46,9 +44,17 @@ enum Commands {
     /// Show the best mission locations/rotations for farming ducats.
     /// Requires the cache to be populated first (`wfmq update`).
     Locations(LocationsArgs),
+
+    /// Connect to the warframe.market WebSocket and print matching orders live.
+    Listen(ListenArgs),
 }
 
-// ---- update ----------------------------------------------------------------
+#[derive(Args)]
+struct ListenArgs {
+    /// Minimum ducats-per-platinum ratio a live order must meet to be reported.
+    #[arg(long)]
+    ratio: f32,
+}
 
 #[derive(Args)]
 struct UpdateArgs {
@@ -56,8 +62,6 @@ struct UpdateArgs {
     #[arg(long)]
     force: bool,
 }
-
-// ---- search ----------------------------------------------------------------
 
 #[derive(Args)]
 struct SearchArgs {
@@ -77,11 +81,11 @@ struct SearchArgs {
     tags: Option<String>,
 }
 
-// ---- ducats ----------------------------------------------------------------
+// ducats
 
 #[derive(Args)]
 struct DucatsArgs {
-    /// Minimum ducats-per-platinum ratio.  E.g. --ratio 15 → ≥15 ducats/plat.
+    /// Minimum ducats-per-platinum ratio.  E.g. --ratio 15 → ≥15 ducats/platinum.
     #[arg(long)]
     ratio: f32,
 
@@ -91,7 +95,7 @@ struct DucatsArgs {
     quantity: u32,
 }
 
-// ---- locations -------------------------------------------------------------
+// locations
 
 #[derive(Args)]
 struct LocationsArgs {
@@ -99,10 +103,6 @@ struct LocationsArgs {
     #[arg(long, default_value = "25")]
     limit: usize,
 }
-
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -115,15 +115,14 @@ async fn main() -> Result<()> {
         Commands::Search(args)    => run_search(args, &client, &config).await,
         Commands::Ducats(args)    => run_ducats(args, &client, &config).await,
         Commands::Locations(args) => run_locations(args, &client, &config).await,
+        Commands::Listen(args)    => run_listen(args, &client, &config).await,
     }
 }
 
-// ---------------------------------------------------------------------------
 // update
-// ---------------------------------------------------------------------------
 
 async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Config) -> Result<()> {
-    // -- Quick single-call endpoints ----------------------------------------
+    // Quick single-call endpoints
     eprintln!("📦 Fetching items...");
     let items = api::get_items(client).await?;
     cache::write(&cache::items_path(), &items)?;
@@ -136,7 +135,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
     let missions = api::get_missions(client).await?;
     cache::write(&cache::missions_path(), &missions)?;
 
-    // -- Dropsource targets -------------------------------------------------
+    // Dropsource targets
     let prime_parts: Vec<_> = items.iter().filter(|i| i.ducats.unwrap_or(0) > 0).collect();
     let relics: Vec<_>      = items.iter().filter(|i| i.tags.contains(&"relic".to_string())).collect();
 
@@ -189,7 +188,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
         }
     }
 
-    // -- Compute & cache relic values ---------------------------------------
+    // Compute & cache relic values
     eprintln!("🪙 Computing expected ducat values per relic...");
 
     let mut dropsources_by_slug: HashMap<String, Vec<DropSource>> = HashMap::new();
@@ -209,9 +208,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
 // search
-// ---------------------------------------------------------------------------
 
 async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
     let store = DataStore::new(client, config);
@@ -255,7 +252,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
 
             hits += 1;
             println!(
-                "[{}] {}p x{} | {} (rep:{}) | https://warframe.market/profile/{} | https://warframe.market/items/{}",
+                "[{}] {}:platinum: x{} | {} (rep:{}) | https://warframe.market/profile/{} | https://warframe.market/items/{}",
                 item.name(),
                 order.platinum,
                 order.quantity,
@@ -271,9 +268,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
 // ducats
-// ---------------------------------------------------------------------------
 
 struct Hit {
     item_name: String,
@@ -317,7 +312,6 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
             if order.user.status != "ingame"    { continue; }
             if order.platinum == 0              { continue; }
             if (ducats as f32 / order.platinum as f32) < args.ratio { continue; }
-
             by_seller.entry(order.user.ingame_name.clone()).or_default().push(Hit {
                 item_name: item.name().to_owned(),
                 platinum:  order.platinum,
@@ -349,16 +343,16 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
         let total_plat:   u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
         let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
         eprintln!(
-            "👤 {username} — {total_qty} items, {total_plat}p total, ~{total_ducats} ducats"
+            "👤 {username} — {total_qty} items, {total_plat}:platinum: total, ~{total_ducats} ducats"
         );
 
         let item_parts: Vec<String> = hits
             .iter()
-            .map(|h| format!("{}x {} ({}p)", h.quantity, h.item_name, h.platinum))
+            .map(|h| format!("{}x {} ({}:platinum:)", h.quantity, h.item_name, h.platinum))
             .collect();
 
         let msg = format!(
-            "/w {username} Hi! I'd like to buy: {} (warframe.market)",
+            "/w {username} Hi! I'd like to buy: {} (warframe.market via wfmq)",
             item_parts.join(", ")
         );
 
@@ -375,9 +369,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
 // locations
-// ---------------------------------------------------------------------------
 
 async fn run_locations(args: LocationsArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
     let store = DataStore::new(client, config);
@@ -436,5 +428,121 @@ async fn run_locations(args: LocationsArgs, client: &RateLimitedClient, config: 
         println!("{}", analysis::format_score(score, &locations_map, &missions_map));
     }
 
+    Ok(())
+}
+
+// listen
+
+async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
+
+    let store = DataStore::new(client, config);
+
+    // Build item_id → (display name, ducats) for all prime parts.
+    eprintln!("📦 Loading item data...");
+    let items = store.items().await?;
+    let items_by_id: HashMap<String, (String, u32)> = items
+        .iter()
+        .filter_map(|i| {
+            let d = i.ducats.filter(|&d| d > 0)?;
+            Some((i.id.clone(), (i.name().to_owned(), d)))
+        })
+        .collect();
+
+    eprintln!(
+        "🪙 {} prime items with ducat values loaded. Ratio filter: ≥{}",
+        items_by_id.len(),
+        args.ratio
+    );
+
+    // Build WebSocket handshake request with the mandatory `wfm` sub-protocol.
+    let mut request = "wss://ws.warframe.market/socket".into_client_request()?;
+    request.headers_mut().insert(
+        "Sec-WebSocket-Protocol",
+        "wfm".parse()?,
+    );
+
+    eprintln!("🔌 Connecting to wss://ws.warframe.market/socket ...");
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await?;
+    eprintln!("✅ Connected. Waiting for orders...\n");
+
+    // Subscribe to new-order events.
+    let sub = serde_json::json!({
+        "route": "@wfm|cmd/subscribe/newOrders",
+        "payload": {
+            "platform": "pc",
+            "crossplay": true
+        },
+        "id": "wfmq-listen-1"
+    });
+    ws.send(Message::Text(sub.to_string())).await?;
+
+    while let Some(raw) = ws.next().await {
+        let raw = match raw {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("⚠  WebSocket error: {e}");
+                break;
+            }
+        };
+
+        // Server sends periodic pings; tungstenite auto-replies with pong.
+        let text = match raw {
+            Message::Text(t)  => t,
+            Message::Close(_) => { eprintln!("🔌 Server closed the connection."); break; }
+            _                 => continue,
+        };
+
+        let msg: serde_json::Value = match serde_json::from_str(&text) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        // Only handle new-order events.
+        let route = msg.get("route").and_then(|r| r.as_str()).unwrap_or("");
+        if !route.contains("newOrder") { continue; }
+
+        let Some(payload) = msg.get("payload") else { continue };
+        let order: models::OrderWithUser = match serde_json::from_value(payload.clone()) {
+            Ok(o) => o,
+            Err(_) => continue,
+        };
+
+        // --- Filters ---
+        if order.order_type != "sell" { continue; }
+        // Accept both spellings — docs show "in_game" but REST uses "ingame".
+        let status = order.user.status.as_str();
+        if status != "ingame" && status != "in_game" { continue; }
+
+        let item_id = match &order.item_id {
+            Some(id) => id,
+            None => continue,
+        };
+
+        let Some((item_name, ducats)) = items_by_id.get(item_id) else { continue };
+        if order.platinum == 0 { continue; }
+
+        let ratio = *ducats as f32 / order.platinum as f32;
+        if ratio < args.ratio { continue; }
+
+        // --- Output ---
+        let msg_out = format!(
+            "/w {} Hi! I'd like to buy: 1x {} ({}:platinum:) (warframe.market via wfmq)",
+            order.user.ingame_name, item_name, order.platinum,
+        );
+
+        println!(
+            "🔔 {} | {}:platinum: | {:.0} d/:platinum: | x{} available | {}",
+            item_name,
+            order.platinum,
+            ratio,
+            order.quantity,
+            order.user.ingame_name,
+        );
+        println!("   {msg_out}\n");
+    }
+
+    eprintln!("📴 Disconnected.");
     Ok(())
 }
