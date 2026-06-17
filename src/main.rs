@@ -6,7 +6,7 @@ mod config;
 mod data;
 mod models;
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 use anyhow::{bail, Result};
 use clap::{Args, Parser, Subcommand};
@@ -125,21 +125,21 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
     // Quick single-call endpoints
     eprintln!(
         "[{}]: 📦 Fetching items...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     let items = api::get_items(client).await?;
     cache::write(&cache::items_path(), &items)?;
 
     eprintln!(
         "[{}]: 🌍 Fetching locations...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     let locations = api::get_locations(client).await?;
     cache::write(&cache::locations_path(), &locations)?;
 
     eprintln!(
         "[{}]: 🎯 Fetching missions...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     let missions = api::get_missions(client).await?;
     cache::write(&cache::missions_path(), &missions)?;
@@ -178,7 +178,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
     if to_fetch.is_empty() {
         eprintln!(
             "[{}]: ✅ All dropsource files already cached (use --force to refresh).",
-            chrono::Utc::now().to_rfc3339()
+            timestamp()
         );
     } else {
         let eta = to_fetch.len() as f32 * 0.334;
@@ -192,7 +192,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
             if (i + 1) % 50 == 0 || i + 1 == to_fetch.len() {
                 eprintln!(
                     "[{}]:   [{}/{}]",
-                    chrono::Utc::now().to_rfc3339(),
+                    timestamp(),
                     i + 1,
                     to_fetch.len()
                 );
@@ -204,7 +204,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
                 Err(e) => {
                     eprintln!(
                         "[{}]:   ⚠ {} — {e}",
-                        chrono::Utc::now().to_rfc3339(),
+                        timestamp(),
                         item.slug
                     );
                 }
@@ -215,7 +215,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
     // Compute & cache relic values
     eprintln!(
         "[{}]: 🪙 Computing expected ducat values per relic...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
 
     let mut dropsources_by_slug: HashMap<String, Vec<DropSource>> = HashMap::new();
@@ -249,7 +249,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
 
     eprintln!(
         "[{}]: 📦 Loading item list...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     let items: Vec<_> = store
         .items()
@@ -263,7 +263,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
     let eta = items.len() as f32 * 0.334;
     eprintln!(
         "[{}]: 🔍 Scanning {} items (~{:.0}s)...",
-        chrono::Utc::now().to_rfc3339(),
+        timestamp(),
         items.len(),
         eta
     );
@@ -273,7 +273,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
         if (i + 1) % 50 == 0 || i + 1 == items.len() {
             eprintln!(
                 "[{}]:   [{}/{}] scanned",
-                chrono::Utc::now().to_rfc3339(),
+                timestamp(),
                 i + 1,
                 items.len()
             );
@@ -284,7 +284,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
             Err(e) => {
                 eprintln!(
                     "[{}]:   ⚠ {}: {e}",
-                    chrono::Utc::now().to_rfc3339(),
+                    timestamp(),
                     item.slug
                 );
                 continue;
@@ -321,7 +321,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
 
     eprintln!(
         "[{}]: ✅ Done — {hits} matching order(s).",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     Ok(())
 }
@@ -340,7 +340,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
 
     eprintln!(
         "[{}]: 📦 Loading item list...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     let all_items = store.items().await?;
 
@@ -352,7 +352,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
     let eta = ducat_items.len() as f32 * 0.334;
     eprintln!(
         "[{}]: 🪙 Scanning {} ducat items at ratio ≥{} (~{:.0}s)...",
-        chrono::Utc::now().to_rfc3339(),
+        timestamp(),
         ducat_items.len(),
         args.ratio,
         eta
@@ -364,7 +364,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
         if (i + 1) % 50 == 0 || i + 1 == ducat_items.len() {
             eprintln!(
                 "[{}]:   [{}/{}] scanned",
-                chrono::Utc::now().to_rfc3339(),
+                timestamp(),
                 i + 1,
                 ducat_items.len()
             );
@@ -376,7 +376,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
             Err(e) => {
                 eprintln!(
                     "[{}]:   ⚠ {}: {e}",
-                    chrono::Utc::now().to_rfc3339(),
+                    timestamp(),
                     item.slug
                 );
                 continue;
@@ -427,7 +427,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
 
     eprintln!(
         "[{}]: ✅ {} seller(s) qualify.\n",
-        chrono::Utc::now().to_rfc3339(),
+        timestamp(),
         qualified.len()
     );
 
@@ -456,7 +456,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
             );
         }
 
-        println!("[{}]: {msg}", chrono::Utc::now().to_rfc3339());
+        println!("[{}]: {msg}", timestamp());
     }
 
     Ok(())
@@ -474,7 +474,7 @@ async fn run_locations(
     // These three are quick and auto-fetch if needed.
     eprintln!(
         "[{}]: 📦 Loading game data...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     let items = store.items().await?;
     let locs_list = store.locations().await?;
@@ -494,7 +494,7 @@ async fn run_locations(
         .collect();
     eprintln!(
         "[{}]: 🗺️  Loading dropsources for {} relics...",
-        chrono::Utc::now().to_rfc3339(),
+        timestamp(),
         relics.len()
     );
 
@@ -533,9 +533,10 @@ async fn run_locations(
         .collect();
 
     let total = resolved.len();
+    let var_name = timestamp();
     eprintln!(
         "[{}]: 🏆 Showing top {} of {} location/rotation combinations (intact relics):\n",
-        chrono::Utc::now().to_rfc3339(),
+        var_name,
         args.limit.min(total),
         total
     );
@@ -543,7 +544,7 @@ async fn run_locations(
     for score in resolved.iter().take(args.limit) {
         println!(
             "[{}]: {}",
-            chrono::Utc::now().to_rfc3339(),
+            timestamp(),
             analysis::format_score(score, &locations_map, &missions_map)
         );
     }
@@ -562,7 +563,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
     // Build item_id → (display name, ducats) for all prime parts.
     eprintln!(
         "[{}]: 📦 Loading item data...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     let items = store.items().await?;
     let items_by_id: HashMap<String, (String, u32)> = items
@@ -587,12 +588,12 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
 
     eprintln!(
         "[{}]: 🔌 Connecting to wss://ws.warframe.market/socket ...",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
     let (mut ws, _) = tokio_tungstenite::connect_async(request).await?;
     eprintln!(
         "[{}]: ✅ Connected. Waiting for orders...\n",
-        chrono::Utc::now().to_rfc3339()
+        timestamp()
     );
 
     // Subscribe to new-order events.
@@ -612,7 +613,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
             Err(e) => {
                 eprintln!(
                     "[{}]: ⚠  WebSocket error: {e}",
-                    chrono::Utc::now().to_rfc3339()
+                    timestamp()
                 );
                 break;
             }
@@ -624,7 +625,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
             Message::Close(_) => {
                 eprintln!(
                     "[{}]: 🔌 Server closed the connection.",
-                    chrono::Utc::now().to_rfc3339()
+                    timestamp()
                 );
                 break;
             }
@@ -687,9 +688,13 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
             "🔔 {} | {}:platinum: | {:.0} d/:platinum: | x{} available | {}",
             item_name, order.platinum, ratio, order.quantity, order.user.ingame_name,
         );
-        println!("[{}]:    {msg_out}\n", chrono::Utc::now().to_rfc3339());
+        println!("[{}]:    {msg_out}\n", timestamp());
     }
 
-    eprintln!("[{}]: 📴 Disconnected.", chrono::Utc::now().to_rfc3339());
+    eprintln!("[{}]: 📴 Disconnected.", timestamp());
     Ok(())
+}
+
+fn timestamp() -> impl std::fmt::Display {
+    chrono::Utc::now().format("%F %X")
 }
