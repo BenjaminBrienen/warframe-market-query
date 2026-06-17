@@ -696,5 +696,5 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
 }
 
 fn timestamp() -> impl std::fmt::Display {
-    chrono::Utc::now().format("%F %X")
+    chrono::Local::now().format("%F %X")
 }
