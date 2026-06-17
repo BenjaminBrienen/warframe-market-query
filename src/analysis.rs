@@ -57,7 +57,7 @@ pub fn build_relic_values(
         };
 
         for src in sources {
-            if src.source_type != "relic" {
+            if src.r#type != "relic" {
                 continue;
             }
             let Some(ref relic_id) = src.relic else {
@@ -133,7 +133,7 @@ pub fn build_mission_scores(
         };
 
         for src in sources {
-            if src.source_type != "mission" {
+            if src.r#type != "mission" {
                 continue;
             }
             let Some(ref loc_id) = src.location else {

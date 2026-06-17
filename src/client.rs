@@ -19,7 +19,7 @@ impl RateLimitedClient {
     pub fn new() -> Self {
         Self {
             inner: Client::builder()
-                .user_agent("wfm-cli/0.1.0")
+                .user_agent("wfmq-cli/0.1.0")
                 .build()
                 .expect("failed to build HTTP client"),
             next_at: Arc::new(Mutex::new(Instant::now())),

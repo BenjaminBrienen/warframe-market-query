@@ -6,16 +6,18 @@ mod config;
 mod data;
 mod models;
 
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use clap::{Args, Parser, Subcommand};
 
 use analysis::RelicValue;
 use client::RateLimitedClient;
 use config::Config;
 use data::DataStore;
+use futures_util::{SinkExt, StreamExt};
 use models::DropSource;
+use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
 
 // CLI definition
 
@@ -47,6 +49,9 @@ enum Commands {
 
     /// Connect to the warframe.market WebSocket and print matching orders live.
     Listen(ListenArgs),
+
+    /// Find out what is worth trading from the user for ducats.
+    UserDucats(UserArgs),
 }
 
 #[derive(Args)]
@@ -66,7 +71,7 @@ struct UpdateArgs {
 #[derive(Args)]
 struct SearchArgs {
     #[arg(long = "type", default_value = "sell")]
-    order_type: String,
+    r#type: String,
 
     /// Maximum platinum price (inclusive).
     #[arg(long)]
@@ -81,8 +86,6 @@ struct SearchArgs {
     tags: Option<String>,
 }
 
-// ducats
-
 #[derive(Args)]
 struct DucatsArgs {
     /// Minimum ducats-per-platinum ratio.  E.g. --ratio 15 → ≥15 ducats/platinum.
@@ -93,6 +96,17 @@ struct DucatsArgs {
     /// qualifying listings.  Prevents wasting a daily trade slot.
     #[arg(long, default_value = "6")]
     quantity: u32,
+}
+
+#[derive(Args)]
+struct UserArgs {
+    /// Username (slug) of the user. Also the "profile".
+    #[arg(long)]
+    username: String,
+
+    /// Minimum ducats-per-platinum ratio.  E.g. --ratio 15 → ≥15 ducats/platinum.
+    #[arg(long)]
+    ratio: f32,
 }
 
 // locations
@@ -116,6 +130,7 @@ async fn main() -> Result<()> {
         Commands::Ducats(args) => run_ducats(args, &client, &config).await,
         Commands::Locations(args) => run_locations(args, &client, &config).await,
         Commands::Listen(args) => run_listen(args, &client, &config).await,
+        Commands::UserDucats(args) => run_user_ducats(args, &client, &config).await,
     }
 }
 
@@ -123,24 +138,15 @@ async fn main() -> Result<()> {
 
 async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Config) -> Result<()> {
     // Quick single-call endpoints
-    eprintln!(
-        "[{}]: 📦 Fetching items...",
-        timestamp()
-    );
+    eprintln!("[{}]: 📦 Fetching items...", timestamp());
     let items = api::get_items(client).await?;
     cache::write(&cache::items_path(), &items)?;
 
-    eprintln!(
-        "[{}]: 🌍 Fetching locations...",
-        timestamp()
-    );
+    eprintln!("[{}]: 🌍 Fetching locations...", timestamp());
     let locations = api::get_locations(client).await?;
     cache::write(&cache::locations_path(), &locations)?;
 
-    eprintln!(
-        "[{}]: 🎯 Fetching missions...",
-        timestamp()
-    );
+    eprintln!("[{}]: 🎯 Fetching missions...", timestamp());
     let missions = api::get_missions(client).await?;
     cache::write(&cache::missions_path(), &missions)?;
 
@@ -190,23 +196,14 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
 
         for (i, item) in to_fetch.iter().enumerate() {
             if (i + 1) % 50 == 0 || i + 1 == to_fetch.len() {
-                eprintln!(
-                    "[{}]:   [{}/{}]",
-                    timestamp(),
-                    i + 1,
-                    to_fetch.len()
-                );
+                eprintln!("[{}]:   [{}/{}]", timestamp(), i + 1, to_fetch.len());
             }
             match api::get_dropsources(client, &item.slug).await {
                 Ok(sources) => {
                     let _ = cache::write(&cache::dropsources_path(&item.slug), &sources);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[{}]:   ⚠ {} — {e}",
-                        timestamp(),
-                        item.slug
-                    );
+                    eprintln!("[{}]:   ⚠ {} — {e}", timestamp(), item.slug);
                 }
             }
         }
@@ -247,10 +244,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
         .map(|t| t.split(',').map(|s| s.trim().to_lowercase()).collect())
         .unwrap_or_default();
 
-    eprintln!(
-        "[{}]: 📦 Loading item list...",
-        timestamp()
-    );
+    eprintln!("[{}]: 📦 Loading item list...", timestamp());
     let items: Vec<_> = store
         .items()
         .await?
@@ -271,22 +265,13 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
     let mut hits = 0usize;
     for (i, item) in items.iter().enumerate() {
         if (i + 1) % 50 == 0 || i + 1 == items.len() {
-            eprintln!(
-                "[{}]:   [{}/{}] scanned",
-                timestamp(),
-                i + 1,
-                items.len()
-            );
+            eprintln!("[{}]:   [{}/{}] scanned", timestamp(), i + 1, items.len());
         }
 
-        let orders = match store.orders(&item.slug).await {
+        let orders = match store.orders_by_item(&item.slug).await {
             Ok(o) => o,
             Err(e) => {
-                eprintln!(
-                    "[{}]:   ⚠ {}: {e}",
-                    timestamp(),
-                    item.slug
-                );
+                eprintln!("[{}]:   ⚠ {}: {e}", timestamp(), item.slug);
                 continue;
             }
         };
@@ -295,7 +280,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
             if order.user.status != "ingame" {
                 continue;
             }
-            if order.order_type != args.order_type {
+            if order.r#type != args.r#type {
                 continue;
             }
             if args.platinum.is_some_and(|max| order.platinum > max) {
@@ -319,10 +304,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
         }
     }
 
-    eprintln!(
-        "[{}]: ✅ Done — {hits} matching order(s).",
-        timestamp()
-    );
+    eprintln!("[{}]: ✅ Done — {hits} matching order(s).", timestamp());
     Ok(())
 }
 
@@ -338,15 +320,12 @@ struct Hit {
 async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
     let store = DataStore::new(client, config);
 
-    eprintln!(
-        "[{}]: 📦 Loading item list...",
-        timestamp()
-    );
+    eprintln!("[{}]: 📦 Loading item list...", timestamp());
     let all_items = store.items().await?;
 
     let ducat_items: Vec<_> = all_items
         .into_iter()
-        .filter(|i| i.ducats.unwrap_or(0) > 0)
+        .filter(|i| i.ducats.is_some_and(|ducats| ducats > 0))
         .collect();
 
     let eta = ducat_items.len() as f32 * 0.334;
@@ -371,20 +350,16 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
         }
 
         let ducats = item.ducats.unwrap_or(0);
-        let orders = match store.orders(&item.slug).await {
+        let orders = match store.orders_by_item(&item.slug).await {
             Ok(o) => o,
             Err(e) => {
-                eprintln!(
-                    "[{}]:   ⚠ {}: {e}",
-                    timestamp(),
-                    item.slug
-                );
+                eprintln!("[{}]:   ⚠ {}: {e}", timestamp(), item.slug);
                 continue;
             }
         };
 
         for order in orders {
-            if order.order_type != "sell" {
+            if order.r#type != "sell" {
                 continue;
             }
             if order.user.status != "ingame" {
@@ -432,34 +407,37 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
     );
 
     for (username, hits) in &qualified {
-        let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
-        let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
-        let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
-        eprintln!(
-            "👤 {username} — {total_qty} items, {total_plat}:platinum: total, ~{total_ducats} ducats"
-        );
-
-        let item_parts: Vec<String> = hits
-            .iter()
-            .map(|h| format!("{}x {} ({}:platinum:)", h.quantity, h.item_name, h.platinum))
-            .collect();
-
-        let msg = format!(
-            "/w {username} Hi! I'd like to buy: {} (warframe.market via wfmq)",
-            item_parts.join(", ")
-        );
-
-        if msg.len() > 255 {
-            eprintln!(
-                "  ⚠  Message is {} chars — Warframe may truncate it.",
-                msg.len()
-            );
-        }
-
-        println!("[{}]: {msg}", timestamp());
+        print_user_hits(username, hits);
     }
 
     Ok(())
+}
+
+fn print_user_hits(username: &str, hits: &Vec<Hit>) {
+    let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
+    let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
+    let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
+    eprintln!(
+        "👤 {username} — {total_qty} items, {total_plat}:platinum: total, ~{total_ducats} ducats"
+    );
+
+    let item_parts: Vec<String> = hits
+        .iter()
+        .map(|h| format!("{}x {} ({}:platinum:)", h.quantity, h.item_name, h.platinum))
+        .collect();
+
+    let msg = format!(
+        "/w {username} Hi! I'd like to buy: {} (warframe.market via wfmq)",
+        item_parts.join(", ")
+    );
+
+    if msg.len() > 255 {
+        eprintln!(
+            "  ⚠  Message is {} chars — Warframe may truncate it.",
+            msg.len()
+        );
+    }
+    println!("[{}]: {msg}", timestamp());
 }
 
 // locations
@@ -472,10 +450,7 @@ async fn run_locations(
     let store = DataStore::new(client, config);
 
     // These three are quick and auto-fetch if needed.
-    eprintln!(
-        "[{}]: 📦 Loading game data...",
-        timestamp()
-    );
+    eprintln!("[{}]: 📦 Loading game data...", timestamp());
     let items = store.items().await?;
     let locs_list = store.locations().await?;
     let mis_list = store.missions().await?;
@@ -552,30 +527,23 @@ async fn run_locations(
     Ok(())
 }
 
-// listen
-
 async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
-    use futures_util::{SinkExt, StreamExt};
-    use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
-
     let store = DataStore::new(client, config);
 
     // Build item_id → (display name, ducats) for all prime parts.
-    eprintln!(
-        "[{}]: 📦 Loading item data...",
-        timestamp()
-    );
+    eprintln!("[{}]: 📦 Loading item data...", timestamp());
     let items = store.items().await?;
     let items_by_id: HashMap<String, (String, u32)> = items
         .iter()
         .filter_map(|i| {
-            let d = i.ducats.filter(|&d| d > 0)?;
-            Some((i.id.clone(), (i.name().to_owned(), d)))
+            let ducats = i.ducats.filter(|&ducats| ducats > 0)?;
+            Some((i.id.clone(), (i.name().to_owned(), ducats)))
         })
         .collect();
 
     eprintln!(
-        "🪙 {} prime items with ducat values loaded. Ratio filter: ≥{}",
+        "[{}]: 🪙 {} prime items with ducat values loaded. Ratio filter: ≥{}",
+        timestamp(),
         items_by_id.len(),
         args.ratio
     );
@@ -591,10 +559,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
         timestamp()
     );
     let (mut ws, _) = tokio_tungstenite::connect_async(request).await?;
-    eprintln!(
-        "[{}]: ✅ Connected. Waiting for orders...\n",
-        timestamp()
-    );
+    eprintln!("[{}]: ✅ Connected. Waiting for orders...\n", timestamp());
 
     // Subscribe to new-order events.
     let sub = serde_json::json!({
@@ -611,10 +576,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
         let raw = match raw {
             Ok(m) => m,
             Err(e) => {
-                eprintln!(
-                    "[{}]: ⚠  WebSocket error: {e}",
-                    timestamp()
-                );
+                eprintln!("[{}]: ⚠  WebSocket error: {e}", timestamp());
                 break;
             }
         };
@@ -623,10 +585,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
         let text = match raw {
             Message::Text(t) => t,
             Message::Close(_) => {
-                eprintln!(
-                    "[{}]: 🔌 Server closed the connection.",
-                    timestamp()
-                );
+                eprintln!("[{}]: 🔌 Server closed the connection.", timestamp());
                 break;
             }
             _ => continue,
@@ -652,7 +611,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
         };
 
         // --- Filters ---
-        if order.order_type != "sell" {
+        if order.r#type != "sell" {
             continue;
         }
         // Accept both spellings — docs show "in_game" but REST uses "ingame".
@@ -685,7 +644,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
         );
 
         println!(
-            "🔔 {} | {}:platinum: | {:.0} d/:platinum: | x{} available | {}",
+            "🔔 {} | {}:platinum: | {:.0} ducats/:platinum: | x{} available | {}",
             item_name, order.platinum, ratio, order.quantity, order.user.ingame_name,
         );
         println!("[{}]:    {msg_out}\n", timestamp());
@@ -695,6 +654,87 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
     Ok(())
 }
 
+async fn run_user_ducats(
+    args: UserArgs,
+    client: &RateLimitedClient,
+    config: &Config,
+) -> Result<()> {
+    let store = DataStore::new(client, config);
+
+    // Build item_id → (display name, ducats) for all prime parts.
+    eprintln!("[{}]: 📦 Loading item data...", timestamp());
+    let items = store.items().await?;
+    let items_by_id: HashMap<String, (String, u32)> = items
+        .iter()
+        .filter_map(|i| {
+            let ducats = i.ducats.filter(|&ducats| ducats > 0)?;
+            Some((i.id.clone(), (i.name().to_owned(), ducats)))
+        })
+        .collect();
+
+    eprintln!(
+        "[{}]: 🪙 {} prime items with ducat values loaded. Ratio filter: ≥{}",
+        timestamp(),
+        items_by_id.len(),
+        args.ratio
+    );
+
+    let cursed_user_slug = ingame_name_to_user_slug_hack(&args.username);
+    let user = match store.user(&cursed_user_slug).await {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("[{}]:   ⚠ {e}", timestamp(),);
+            return Err(anyhow!("{e}"));
+        }
+    };
+    let orders = match store.orders_by_user(&user.slug).await {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("[{}]:   ⚠ {e}", timestamp(),);
+            return Err(anyhow!("{e}"));
+        }
+    };
+    let mut hits = Vec::new();
+    for order in orders {
+        if order.r#type != "sell" {
+            continue;
+        }
+        if order.platinum == 0 {
+            continue;
+        }
+        let (item_name, ducats) = match items_by_id.get(&order.item_id) {
+            Some(value) => value,
+            None => continue,
+        };
+        if (*ducats as f32 / order.platinum as f32) < args.ratio {
+            continue;
+        }
+        hits.push(Hit {
+            item_name: item_name.clone(),
+            platinum: order.platinum as u32,
+            quantity: order.quantity as u32,
+            ducats: *ducats,
+        });
+    }
+    if hits.is_empty() {
+        eprintln!(
+            "[{}]: Nothing to buy from user {} with the given criteria.",
+            timestamp(),
+            args.username
+        );
+    } else {
+        print_user_hits(&args.username, &hits);
+    }
+    Ok(())
+}
+
 fn timestamp() -> impl std::fmt::Display {
     chrono::Local::now().format("%F %X")
+}
+
+fn ingame_name_to_user_slug_hack(ingame_name: &str) -> String {
+    ingame_name
+        .replace(" ", "-")
+        .replace(".", "-")
+        .to_ascii_lowercase()
 }

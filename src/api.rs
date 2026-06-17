@@ -3,12 +3,7 @@
 
 use anyhow::Result;
 
-use crate::{
-    client::RateLimitedClient,
-    models::{
-        ApiResponse, DropSource, ItemShort, Location, Mission, OrderWithUser, V1DropSourcesResponse,
-    },
-};
+use crate::{client::RateLimitedClient, models::*};
 
 pub async fn get_items(client: &RateLimitedClient) -> Result<Vec<ItemShort>> {
     Ok(client
@@ -47,9 +42,30 @@ pub async fn get_dropsources(client: &RateLimitedClient, slug: &str) -> Result<V
     Ok(resp.payload.dropsources)
 }
 
-pub async fn get_orders(client: &RateLimitedClient, slug: &str) -> Result<Vec<OrderWithUser>> {
+pub async fn get_orders_by_item(
+    client: &RateLimitedClient,
+    slug: &str,
+) -> Result<Vec<OrderWithUser>> {
     Ok(client
         .get(&format!("/v2/orders/item/{slug}"))
+        .await?
+        .json::<ApiResponse<_>>()
+        .await?
+        .data)
+}
+
+pub async fn get_orders_by_user(client: &RateLimitedClient, slug: &str) -> Result<Vec<Order>> {
+    Ok(client
+        .get(&format!("/v2/orders/user/{slug}"))
+        .await?
+        .json::<ApiResponse<_>>()
+        .await?
+        .data)
+}
+
+pub async fn get_user(client: &RateLimitedClient, slug: &str) -> Result<User> {
+    Ok(client
+        .get(&format!("/v2/user/{slug}"))
         .await?
         .json::<ApiResponse<_>>()
         .await?

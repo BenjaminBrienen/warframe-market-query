@@ -35,8 +35,16 @@ pub fn dropsources_path(slug: &str) -> PathBuf {
     PathBuf::from(format!("data/dropsources/{slug}.json"))
 }
 
-pub fn orders_path(slug: &str) -> PathBuf {
-    PathBuf::from(format!("data/orders/{slug}.json"))
+pub fn orders_item_path(slug: &str) -> PathBuf {
+    PathBuf::from(format!("data/orders/item/{slug}.json"))
+}
+
+pub fn orders_user_path(slug: &str) -> PathBuf {
+    PathBuf::from(format!("data/orders/user/{slug}.json"))
+}
+
+pub fn user_path(slug: &str) -> PathBuf {
+    PathBuf::from(format!("data/user/{slug}.json"))
 }
 
 // ---------------------------------------------------------------------------
