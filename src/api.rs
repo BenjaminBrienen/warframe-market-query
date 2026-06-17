@@ -6,21 +6,35 @@ use anyhow::Result;
 use crate::{
     client::RateLimitedClient,
     models::{
-        ApiResponse, DropSource, ItemShort, Location, Mission, OrderWithUser,
-        V1DropSourcesResponse,
+        ApiResponse, DropSource, ItemShort, Location, Mission, OrderWithUser, V1DropSourcesResponse,
     },
 };
 
 pub async fn get_items(client: &RateLimitedClient) -> Result<Vec<ItemShort>> {
-    Ok(client.get("/v2/items").await?.json::<ApiResponse<_>>().await?.data)
+    Ok(client
+        .get("/v2/items")
+        .await?
+        .json::<ApiResponse<_>>()
+        .await?
+        .data)
 }
 
 pub async fn get_locations(client: &RateLimitedClient) -> Result<Vec<Location>> {
-    Ok(client.get("/v2/locations").await?.json::<ApiResponse<_>>().await?.data)
+    Ok(client
+        .get("/v2/locations")
+        .await?
+        .json::<ApiResponse<_>>()
+        .await?
+        .data)
 }
 
 pub async fn get_missions(client: &RateLimitedClient) -> Result<Vec<Mission>> {
-    Ok(client.get("/v2/missions").await?.json::<ApiResponse<_>>().await?.data)
+    Ok(client
+        .get("/v2/missions")
+        .await?
+        .json::<ApiResponse<_>>()
+        .await?
+        .data)
 }
 
 /// Dropsources live on v1, which uses a different response envelope.

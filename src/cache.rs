@@ -18,10 +18,18 @@ use serde::{de::DeserializeOwned, Serialize};
 // Path helpers
 // ---------------------------------------------------------------------------
 
-pub fn items_path()            -> PathBuf { PathBuf::from("data/items.json") }
-pub fn locations_path()        -> PathBuf { PathBuf::from("data/locations.json") }
-pub fn missions_path()         -> PathBuf { PathBuf::from("data/missions.json") }
-pub fn ducats_per_relic_path() -> PathBuf { PathBuf::from("data/ducats_per_relic.json") }
+pub fn items_path() -> PathBuf {
+    PathBuf::from("data/items.json")
+}
+pub fn locations_path() -> PathBuf {
+    PathBuf::from("data/locations.json")
+}
+pub fn missions_path() -> PathBuf {
+    PathBuf::from("data/missions.json")
+}
+pub fn ducats_per_relic_path() -> PathBuf {
+    PathBuf::from("data/ducats_per_relic.json")
+}
 
 pub fn dropsources_path(slug: &str) -> PathBuf {
     PathBuf::from(format!("data/dropsources/{slug}.json"))
@@ -62,8 +70,14 @@ pub fn write<T: Serialize>(path: &Path, data: &T) -> Result<()> {
 /// Returns `true` if the file exists AND its last-modified time is within
 /// `max_age_minutes` of now.
 pub fn is_fresh(path: &Path, max_age_minutes: u64) -> bool {
-    let Ok(meta) = fs::metadata(path) else { return false };
-    let Ok(modified) = meta.modified() else { return false };
-    let Ok(elapsed) = SystemTime::now().duration_since(modified) else { return false };
+    let Ok(meta) = fs::metadata(path) else {
+        return false;
+    };
+    let Ok(modified) = meta.modified() else {
+        return false;
+    };
+    let Ok(elapsed) = SystemTime::now().duration_since(modified) else {
+        return false;
+    };
     elapsed.as_secs() < max_age_minutes * 60
 }

@@ -9,7 +9,9 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { orders_cache_minutes: 5 }
+        Self {
+            orders_cache_minutes: 5,
+        }
     }
 }
 

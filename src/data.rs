@@ -12,8 +12,7 @@
 use anyhow::Result;
 
 use crate::{
-    api,
-    cache,
+    api, cache,
     client::RateLimitedClient,
     config::Config,
     models::{DropSource, ItemShort, Location, Mission, OrderWithUser},
