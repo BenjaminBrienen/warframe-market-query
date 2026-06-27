@@ -55,17 +55,17 @@ enum Commands {
 }
 
 #[derive(Args)]
-struct ListenArgs {
-    /// Minimum ducats-per-platinum ratio a live order must meet to be reported.
-    #[arg(long)]
-    ratio: f32,
-}
-
-#[derive(Args)]
 struct UpdateArgs {
     /// Re-fetch dropsource files even when they are already cached.
     #[arg(long)]
     force: bool,
+}
+
+#[derive(Args)]
+struct ListenArgs {
+    /// Minimum ducats-per-platinum ratio a live order must meet to be reported.
+    #[arg(long)]
+    ratio: f32,
 }
 
 #[derive(Args)]
@@ -133,8 +133,6 @@ async fn main() -> Result<()> {
         Commands::UserDucats(args) => run_user_ducats(args, &client, &config).await,
     }
 }
-
-// update
 
 async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Config) -> Result<()> {
     // Quick single-call endpoints
@@ -211,7 +209,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
 
     // Compute & cache relic values
     eprintln!(
-        "[{}]: 🪙 Computing expected ducat values per relic...",
+        "[{}]: 🪙  Computing expected ducat values per relic...",
         timestamp()
     );
 
@@ -232,8 +230,6 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
     );
     Ok(())
 }
-
-// search
 
 async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
     let store = DataStore::new(client, config);
@@ -308,15 +304,6 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
     Ok(())
 }
 
-// ducats
-
-struct Hit {
-    item_name: String,
-    platinum: u32,
-    quantity: u32,
-    ducats: u32,
-}
-
 async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
     let store = DataStore::new(client, config);
 
@@ -330,7 +317,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
 
     let eta = ducat_items.len() as f32 * 0.334;
     eprintln!(
-        "[{}]: 🪙 Scanning {} ducat items at ratio ≥{} (~{:.0}s)...",
+        "[{}]: 🪙  Scanning {} ducat items at ratio ≥{} (~{:.0}s)...",
         timestamp(),
         ducat_items.len(),
         args.ratio,
@@ -440,8 +427,6 @@ fn print_user_hits(username: &str, hits: &Vec<Hit>) {
     println!("[{}]: {msg}", timestamp());
 }
 
-// locations
-
 async fn run_locations(
     args: LocationsArgs,
     client: &RateLimitedClient,
@@ -532,17 +517,10 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
 
     // Build item_id → (display name, ducats) for all prime parts.
     eprintln!("[{}]: 📦 Loading item data...", timestamp());
-    let items = store.items().await?;
-    let items_by_id: HashMap<String, (String, u32)> = items
-        .iter()
-        .filter_map(|i| {
-            let ducats = i.ducats.filter(|&ducats| ducats > 0)?;
-            Some((i.id.clone(), (i.name().to_owned(), ducats)))
-        })
-        .collect();
+    let items_by_id = get_items_and_ducats(&store).await?;
 
     eprintln!(
-        "[{}]: 🪙 {} prime items with ducat values loaded. Ratio filter: ≥{}",
+        "[{}]: 🪙  {} prime items with ducat values loaded. Ratio filter: ≥{}",
         timestamp(),
         items_by_id.len(),
         args.ratio
@@ -573,81 +551,16 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
     ws.send(Message::Text(sub.to_string())).await?;
 
     while let Some(raw) = ws.next().await {
-        let raw = match raw {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!("[{}]: ⚠  WebSocket error: {e}", timestamp());
-                break;
+        match listen_one(raw, &items_by_id, args.ratio) {
+            Ok(should_continue) => {
+                if should_continue {
+                    continue;
+                } else {
+                    break;
+                }
             }
-        };
-
-        // Server sends periodic pings; tungstenite auto-replies with pong.
-        let text = match raw {
-            Message::Text(t) => t,
-            Message::Close(_) => {
-                eprintln!("[{}]: 🔌 Server closed the connection.", timestamp());
-                break;
-            }
-            _ => continue,
-        };
-
-        let msg: serde_json::Value = match serde_json::from_str(&text) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-
-        // Only handle new-order events.
-        let route = msg.get("route").and_then(|r| r.as_str()).unwrap_or("");
-        if !route.contains("newOrder") {
-            continue;
+            Err(_) => break,
         }
-
-        let Some(payload) = msg.get("payload") else {
-            continue;
-        };
-        let order: models::OrderWithUser = match serde_json::from_value(payload.clone()) {
-            Ok(o) => o,
-            Err(_) => continue,
-        };
-
-        // --- Filters ---
-        if order.r#type != "sell" {
-            continue;
-        }
-        // Accept both spellings — docs show "in_game" but REST uses "ingame".
-        let status = order.user.status.as_str();
-        if status != "ingame" && status != "in_game" {
-            continue;
-        }
-
-        let item_id = match &order.item_id {
-            Some(id) => id,
-            None => continue,
-        };
-
-        let Some((item_name, ducats)) = items_by_id.get(item_id) else {
-            continue;
-        };
-        if order.platinum == 0 {
-            continue;
-        }
-
-        let ratio = *ducats as f32 / order.platinum as f32;
-        if ratio < args.ratio {
-            continue;
-        }
-
-        // --- Output ---
-        let msg_out = format!(
-            "/w {} Hi! I'd like to buy: 1x {} ({}:platinum:) (warframe.market via wfmq)",
-            order.user.ingame_name, item_name, order.platinum,
-        );
-
-        println!(
-            "🔔 {} | {}:platinum: | {:.0} ducats/:platinum: | x{} available | {}",
-            item_name, order.platinum, ratio, order.quantity, order.user.ingame_name,
-        );
-        println!("[{}]:    {msg_out}\n", timestamp());
     }
 
     eprintln!("[{}]: 📴 Disconnected.", timestamp());
@@ -663,17 +576,10 @@ async fn run_user_ducats(
 
     // Build item_id → (display name, ducats) for all prime parts.
     eprintln!("[{}]: 📦 Loading item data...", timestamp());
-    let items = store.items().await?;
-    let items_by_id: HashMap<String, (String, u32)> = items
-        .iter()
-        .filter_map(|i| {
-            let ducats = i.ducats.filter(|&ducats| ducats > 0)?;
-            Some((i.id.clone(), (i.name().to_owned(), ducats)))
-        })
-        .collect();
+    let items_by_id = get_items_and_ducats(&store).await?;
 
     eprintln!(
-        "[{}]: 🪙 {} prime items with ducat values loaded. Ratio filter: ≥{}",
+        "[{}]: 🪙  {} prime items with ducat values loaded. Ratio filter: ≥{}",
         timestamp(),
         items_by_id.len(),
         args.ratio
@@ -687,6 +593,14 @@ async fn run_user_ducats(
             return Err(anyhow!("{e}"));
         }
     };
+    if user.status != "ingame" {
+        eprintln!(
+            "[{}]: User {} is not ingame anymore.",
+            timestamp(),
+            user.ingame_name
+        );
+        return Ok(());
+    }
     let orders = match store.orders_by_user(&user.slug).await {
         Ok(o) => o,
         Err(e) => {
@@ -694,28 +608,10 @@ async fn run_user_ducats(
             return Err(anyhow!("{e}"));
         }
     };
-    let mut hits = Vec::new();
-    for order in orders {
-        if order.r#type != "sell" {
-            continue;
-        }
-        if order.platinum == 0 {
-            continue;
-        }
-        let (item_name, ducats) = match items_by_id.get(&order.item_id) {
-            Some(value) => value,
-            None => continue,
-        };
-        if (*ducats as f32 / order.platinum as f32) < args.ratio {
-            continue;
-        }
-        hits.push(Hit {
-            item_name: item_name.clone(),
-            platinum: order.platinum as u32,
-            quantity: order.quantity as u32,
-            ducats: *ducats,
-        });
-    }
+    let hits: Vec<_> = orders
+        .iter()
+        .filter_map(|order| order_to_hit(&items_by_id, order, args.ratio))
+        .collect();
     if hits.is_empty() {
         eprintln!(
             "[{}]: Nothing to buy from user {} with the given criteria.",
@@ -728,13 +624,166 @@ async fn run_user_ducats(
     Ok(())
 }
 
+fn order_to_hit(
+    items_by_id: &HashMap<String, (String, u32)>,
+    order: &models::Order,
+    ratio: f32,
+) -> Option<Hit> {
+    if order.r#type != "sell" {
+        return None;
+    }
+    if order.platinum == 0 {
+        return None;
+    }
+    let (item_name, ducats) = match items_by_id.get(&order.item_id) {
+        Some(value) => value,
+        None => return None,
+    };
+    if (*ducats as f32 / order.platinum as f32) < ratio {
+        return None;
+    }
+    Some(Hit {
+        item_name: item_name.clone(),
+        platinum: order.platinum as u32,
+        quantity: order.quantity as u32,
+        ducats: *ducats,
+    })
+}
+
+async fn get_items_and_ducats(
+    store: &DataStore<'_>,
+) -> Result<HashMap<String, (String, u32)>, anyhow::Error> {
+    let items = store.items().await?;
+    let items_by_id: HashMap<String, (String, u32)> = items
+        .iter()
+        .filter_map(|i| {
+            let ducats = i.ducats.filter(|&ducats| ducats > 0)?;
+            Some((i.id.clone(), (i.name().to_owned(), ducats)))
+        })
+        .collect();
+    Ok(items_by_id)
+}
+
 fn timestamp() -> impl std::fmt::Display {
     chrono::Local::now().format("%F %X")
 }
 
 fn ingame_name_to_user_slug_hack(ingame_name: &str) -> String {
     ingame_name
-        .replace(" ", "-")
-        .replace(".", "-")
-        .to_ascii_lowercase()
+        .chars()
+        .map(|character| match character {
+            ' ' | '.' => '-',
+            c => c.to_ascii_lowercase(),
+        })
+        .collect()
+}
+
+struct Hit {
+    item_name: String,
+    platinum: u32,
+    quantity: u32,
+    ducats: u32,
+}
+
+fn listen_one(
+    raw: Result<Message, tokio_tungstenite::tungstenite::Error>,
+    items_with_ducats_by_id: &HashMap<String, (String, u32)>,
+    filter_ratio: f32,
+) -> Result<bool> {
+    let raw = match raw {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("[{}]: ⚠  WebSocket error: {e}", timestamp());
+            return Err(anyhow!("WebSocket error: {e}"));
+        }
+    };
+
+    // Server sends periodic pings; tungstenite auto-replies with pong.
+    let text = match raw {
+        Message::Text(text) => text,
+        Message::Close(_) => {
+            eprintln!("[{}]: 🔌 Server closed the connection.", timestamp());
+            return Ok(false);
+        }
+        _ => return Ok(true),
+    };
+
+    let msg: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(_) => {
+            eprintln!("[{}]: ⚠️  message text is not JSON: {text}", timestamp());
+            return Ok(true);
+        }
+    };
+
+    // Only handle new-order events.
+    let route = msg.get("route").and_then(|r| r.as_str()).unwrap_or("");
+    // ignorable messages
+    if matches!(
+        route,
+        "@wfm|event/reports/online" | "@wfm|cmd/subscribe/newOrders:ok"
+    ) {
+        return Ok(true);
+    }
+    if !route.contains("newOrder") {
+        eprintln!(
+            "[{}]: ⚠️  received response from the wrong route: {route}",
+            timestamp()
+        );
+        return Ok(true);
+    }
+
+    let Some(payload) = msg.get("payload") else {
+        eprintln!("[{}]: ⚠️  response is missing payload: {msg}", timestamp());
+        return Ok(true);
+    };
+    let order: models::OrderWithUser = match serde_json::from_value(payload.clone()) {
+        Ok(o) => o,
+        Err(_) => {
+            eprintln!(
+                "[{}]: ⚠️  failed to deserialize response: {payload:?}",
+                timestamp()
+            );
+            return Ok(true);
+        }
+    };
+
+    // --- Filters ---
+    if order.r#type != "sell" {
+        return Ok(true);
+    }
+    // Accept both spellings — docs show "in_game" but REST uses "ingame".
+    let status = order.user.status.as_str();
+    if status != "ingame" && status != "in_game" {
+        return Ok(true);
+    }
+
+    // early return if item is not a prime part with a ducat value
+    let Some((item_name, ducats)) = items_with_ducats_by_id.get(&order.item_id) else {
+        return Ok(true);
+    };
+    // avoid divide by zero, should not actually happen
+    if order.platinum == 0 {
+        eprintln!("[{}]: ⚠️  order somehow is for 0 platinum", timestamp());
+        return Ok(true);
+    }
+
+    let order_ratio = *ducats as f32 / order.platinum as f32;
+    if order_ratio < filter_ratio {
+        // not worth it
+        return Ok(true);
+    }
+
+    // --- Output ---
+    let msg_out = format!(
+        "/w {} Hi! I'd like to buy: 1x {} ({}:platinum:) (warframe.market via wfmq)",
+        order.user.ingame_name, item_name, order.platinum,
+    );
+
+    println!(
+        "🔔 {} | {}:platinum: | {:.0} ducats/:platinum: | x{} available | {}",
+        item_name, order.platinum, order_ratio, order.quantity, order.user.ingame_name,
+    );
+    println!("[{}]:    {msg_out}\n", timestamp());
+    Ok(true)
 }

@@ -139,8 +139,7 @@ pub struct OrderWithUser {
     pub r#type: String,
     pub platinum: u32,
     pub quantity: u32,
-    #[serde(default)]
-    pub item_id: Option<String>,
+    pub item_id: String,
     pub user: UserShort,
 }
 
