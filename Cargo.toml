@@ -8,12 +8,20 @@ name = "wfmq"
 path = "src/main.rs"
 
 [dependencies]
-anyhow    = "1"
-clap      = { version = "4", features = ["derive"] }
-reqwest   = { version = "0.12", features = ["json"] }
-serde     = { version = "1",  features = ["derive"] }
-serde_json = "1"
-tokio     = { version = "1",  features = ["full"] }
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots", "native-tls"] }
-futures-util      = "0.3"
+anyhow = "1"
 chrono = "0.4.45"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+rodio = {
+  version = "0.22.2",
+  default-features = false,
+  features = ["64bit", "playback"]
+}
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = {
+  version = "0.24",
+  features = ["native-tls", "rustls-tls-webpki-roots"]
+}

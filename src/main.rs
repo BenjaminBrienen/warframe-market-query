@@ -6,7 +6,7 @@ mod config;
 mod data;
 mod models;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::File, io::BufReader};
 
 use anyhow::{anyhow, bail, Result};
 use clap::{Args, Parser, Subcommand};
@@ -779,7 +779,11 @@ fn listen_one(
         "/w {} Hi! I'd like to buy: 1x {} ({}:platinum:) (warframe.market via wfmq)",
         order.user.ingame_name, item_name, order.platinum,
     );
-
+    let sink_handle =
+        rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
+    let file = BufReader::new(File::open("sound.ogg").unwrap());
+    let input = rodio::play(sink_handle.mixer(), file);
+    input.unwrap().play();
     println!(
         "🔔 {} | {}:platinum: | {:.0} ducats/:platinum: | x{} available | {}",
         item_name, order.platinum, order_ratio, order.quantity, order.user.ingame_name,
