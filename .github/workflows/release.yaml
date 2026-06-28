@@ -28,20 +28,17 @@ jobs:
 
       - run: cargo build --release
 
-      - name: Package binary
-        shell: bash
-        run: |
-          cd target/release
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            7z a "../../$BINARY_NAME-$RUNNER_OS.zip" "$BINARY_NAME.exe"
-          else
-            tar czf "../../$BINARY_NAME-$RUNNER_OS.tar.gz" "$BINARY_NAME"
-          fi
-
       - uses: actions/upload-artifact@v7
+        if: runner.os == 'Windows'
         with:
           name: ${{ matrix.os }}
-          path: ${{ env.BINARY_NAME }}-*
+          path: target/release/${{ env.BINARY_NAME }}.exe
+
+      - uses: actions/upload-artifact@v7
+        if: runner.os != 'Windows'
+        with:
+          name: ${{ matrix.os }}
+          path: target/release/${{ env.BINARY_NAME }}
 
   release:
     needs: build
