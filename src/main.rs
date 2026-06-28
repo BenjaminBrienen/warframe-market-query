@@ -17,6 +17,7 @@ use config::Config;
 use data::DataStore;
 use futures_util::{SinkExt, StreamExt};
 use models::DropSource;
+use rodio::Source;
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
 
 // CLI definition
@@ -779,11 +780,23 @@ fn listen_one(
         "/w {} Hi! I'd like to buy: 1x {} ({}:platinum:) (warframe.market via wfmq)",
         order.user.ingame_name, item_name, order.platinum,
     );
-    let sink_handle =
-        rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
-    let file = BufReader::new(File::open("sound.ogg").unwrap());
-    let input = rodio::play(sink_handle.mixer(), file);
-    input.unwrap().play();
+
+    _ = std::thread::spawn(|| {
+        let mut sink_handle =
+            rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
+        sink_handle.log_on_drop(false);
+
+        let file = BufReader::new(File::open("sound.ogg").unwrap());
+        let player = rodio::play(sink_handle.mixer(), file).unwrap();
+        player.play();
+        let source =
+            rodio::Decoder::try_from(BufReader::new(File::open("sound.ogg").unwrap())).unwrap();
+        let duration = source
+            .total_duration()
+            .unwrap_or(std::time::Duration::from_secs(2));
+        std::thread::sleep(duration);
+    });
+
     println!(
         "🔔 {} | {}:platinum: | {:.0} ducats/:platinum: | x{} available | {}",
         item_name, order.platinum, order_ratio, order.quantity, order.user.ingame_name,
