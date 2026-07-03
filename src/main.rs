@@ -20,6 +20,8 @@ use models::DropSource;
 use rodio::Source;
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
 
+const PLATINUM: &str = "p";
+
 // CLI definition
 
 #[derive(Parser)]
@@ -289,7 +291,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
 
             hits += 1;
             println!(
-                "[{}] {}:platinum: x{} | {} (rep:{}) | https://warframe.market/profile/{} | https://warframe.market/items/{}",
+                "[{}] {}{PLATINUM} x{} | {} (rep:{}) | https://warframe.market/profile/{} | https://warframe.market/items/{}",
                 item.name(),
                 order.platinum,
                 order.quantity,
@@ -406,12 +408,12 @@ fn print_user_hits(username: &str, hits: &Vec<Hit>) {
     let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
     let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
     eprintln!(
-        "👤 {username} — {total_qty} items, {total_plat}:platinum: total, ~{total_ducats} ducats"
+        "👤 {username} — {total_qty} items, {total_plat}{PLATINUM} total, ~{total_ducats} ducats"
     );
 
     let item_parts: Vec<String> = hits
         .iter()
-        .map(|h| format!("{}x {} ({}:platinum:)", h.quantity, h.item_name, h.platinum))
+        .map(|h| format!("{}x {} ({}{PLATINUM})", h.quantity, h.item_name, h.platinum))
         .collect();
 
     let msg = format!(
@@ -777,7 +779,7 @@ fn listen_one(
 
     // --- Output ---
     let msg_out = format!(
-        "/w {} Hi! I'd like to buy: 1x {} ({}:platinum:) (warframe.market via wfmq)",
+        "/w {} Hi! I'd like to buy: 1x {} ({}{PLATINUM}) (warframe.market via wfmq)",
         order.user.ingame_name, item_name, order.platinum,
     );
 
@@ -798,7 +800,7 @@ fn listen_one(
     });
 
     println!(
-        "🔔 {} | {}:platinum: | {:.0} ducats/:platinum: | x{} available | {}",
+        "🔔 {} | {}{PLATINUM} | {:.0} ducats/{PLATINUM} | x{} available | {}",
         item_name, order.platinum, order_ratio, order.quantity, order.user.ingame_name,
     );
     println!("[{}]:    {msg_out}\n", timestamp());
