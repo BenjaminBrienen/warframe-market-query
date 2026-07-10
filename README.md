@@ -1,6 +1,6 @@
 # wfmq
 
-A command-line tool for querying [warframe.market](https://warframe.market) — find ducat-efficient trades, watch live sell orders, and check what's worth buying from a specific seller.
+A command-line tool for querying [warframe.market](https://warframe.market). Find ducat-efficient trades, watch live sell orders, and check what's worth buying from a specific seller.
 
 ## Building from source
 
