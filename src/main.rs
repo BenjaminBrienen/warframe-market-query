@@ -407,8 +407,10 @@ fn print_user_hits(username: &str, hits: &Vec<Hit>) {
     let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
     let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
     let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
+    let total_ratio = total_ducats as f32 / total_plat as f32;
     eprintln!(
-        "👤 {username} — {total_qty} items, {total_plat}{PLATINUM} total, ~{total_ducats} ducats"
+        "👤 {username} — {total_qty} items, {total_plat}{PLATINUM} total, ~{total_ducats} ducats, {total_ratio} ducats/{PLATINUM}",
+        username = username_quoted(username),
     );
 
     let item_parts: Vec<String> = hits
@@ -417,7 +419,8 @@ fn print_user_hits(username: &str, hits: &Vec<Hit>) {
         .collect();
 
     let msg = format!(
-        "/w {username} Hi! I'd like to buy: {} (warframe.market via wfmq)",
+        "/w {} Hi! I'd like to buy: {} (warframe.market via wfmq)",
+        username_quoted(username),
         item_parts.join(", ")
     );
 
@@ -598,9 +601,9 @@ async fn run_user_ducats(
     };
     if user.status != "ingame" {
         eprintln!(
-            "[{}]: User {} is not ingame anymore.",
+            "[{}]: User {username} is not ingame anymore.",
             timestamp(),
-            user.ingame_name
+            username = username_quoted(&user.ingame_name)
         );
         return Ok(());
     }
@@ -805,4 +808,12 @@ fn listen_one(
     );
     println!("[{}]:    {msg_out}\n", timestamp());
     Ok(true)
+}
+
+fn username_quoted(username: &str) -> String {
+    if username.contains(" ") {
+        format!("\"{username}\"")
+    } else {
+        username.to_string()
+    }
 }
