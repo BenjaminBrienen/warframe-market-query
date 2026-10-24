@@ -14,9 +14,17 @@
 
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
-use crate::models::{DropSource, ItemShort, Location, Mission};
+use crate::models::{
+    DropSource,
+    ItemShort,
+    Location,
+    Mission,
+};
 
 // ---------------------------------------------------------------------------
 // Intermediate / cached output

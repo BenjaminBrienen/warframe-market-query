@@ -1,9 +1,18 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use reqwest::{Client, Response};
-use tokio::sync::Mutex;
-use tokio::time::{sleep_until, Duration, Instant};
+use reqwest::{
+    Client,
+    Response,
+};
+use tokio::{
+    sync::Mutex,
+    time::{
+        Duration,
+        Instant,
+        sleep_until,
+    },
+};
 
 /// 3 requests per second → one request every 334 ms.
 const RATE_INTERVAL: Duration = Duration::from_millis(334);
@@ -29,7 +38,10 @@ impl RateLimitedClient {
     /// Acquire the rate-limit slot, then fire the request.
     /// All callers share the same `next_at` mutex, so concurrent calls are
     /// serialised automatically and the limit is never exceeded.
-    pub async fn get(&self, path: &str) -> Result<Response> {
+    pub async fn get(
+        &self,
+        path: &str,
+    ) -> Result<Response> {
         {
             let mut next = self.next_at.lock().await;
             let now = Instant::now();

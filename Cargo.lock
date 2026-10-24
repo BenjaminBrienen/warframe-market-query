@@ -969,6 +969,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "jod-thread"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a037eddb7d28de1d0fc42411f501b53b75838d313908078d6698d064f3029b24"
+
+[[package]]
 name = "js-sys"
 version = "0.3.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2532,6 +2538,7 @@ dependencies = [
  "chrono",
  "clap",
  "futures-util",
+ "jod-thread",
  "reqwest",
  "rodio",
  "serde",

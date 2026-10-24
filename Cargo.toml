@@ -12,6 +12,7 @@ anyhow = "1.0.104"
 chrono = "0.4.45"
 clap = { version = "4.6.7", features = ["derive"] }
 futures-util = "0.3.34"
+jod-thread = "1.0.0"
 reqwest = { version = "0.13.5", features = ["json"] }
 rodio = {
   version = "0.23.0",

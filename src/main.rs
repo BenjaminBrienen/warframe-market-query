@@ -6,19 +6,36 @@ mod config;
 mod data;
 mod models;
 
-use std::{collections::HashMap, fs::File, io::BufReader};
-
-use anyhow::{anyhow, bail, Result};
-use clap::{Args, Parser, Subcommand};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::BufReader,
+};
 
 use analysis::RelicValue;
+use anyhow::{
+    Context,
+    Result,
+    anyhow,
+    bail,
+};
+use clap::{
+    Args,
+    Parser,
+    Subcommand,
+};
 use client::RateLimitedClient;
 use config::Config;
 use data::DataStore;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{
+    SinkExt,
+    StreamExt,
+};
 use models::DropSource;
-use rodio::Source;
-use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
+use tokio_tungstenite::tungstenite::{
+    Message,
+    client::IntoClientRequest,
+};
 
 const PLATINUM: &str = "p";
 
@@ -55,6 +72,9 @@ enum Commands {
 
     /// Find out what is worth trading from the user for ducats.
     UserDucats(UserArgs),
+
+    /// Test sound effect
+    PlaySound(()),
 }
 
 #[derive(Args)]
@@ -134,10 +154,18 @@ async fn main() -> Result<()> {
         Commands::Locations(args) => run_locations(args, &client, &config).await,
         Commands::Listen(args) => run_listen(args, &client, &config).await,
         Commands::UserDucats(args) => run_user_ducats(args, &client, &config).await,
+        Commands::PlaySound(()) => {
+            play_sound();
+            Ok(())
+        },
     }
 }
 
-async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Config) -> Result<()> {
+async fn run_update(
+    args: UpdateArgs,
+    client: &RateLimitedClient,
+    _config: &Config,
+) -> Result<()> {
     // Quick single-call endpoints
     eprintln!("[{}]: 📦 Fetching items...", timestamp());
     let items = api::get_items(client).await?;
@@ -202,10 +230,10 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
             match api::get_dropsources(client, &item.slug).await {
                 Ok(sources) => {
                     let _ = cache::write(&cache::dropsources_path(&item.slug), &sources);
-                }
+                },
                 Err(e) => {
                     eprintln!("[{}]:   ⚠ {} — {e}", timestamp(), item.slug);
-                }
+                },
             }
         }
     }
@@ -234,7 +262,11 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
     Ok(())
 }
 
-async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
+async fn run_search(
+    args: SearchArgs,
+    client: &RateLimitedClient,
+    config: &Config,
+) -> Result<()> {
     let store = DataStore::new(client, config);
 
     let required_tags: Vec<String> = args
@@ -272,7 +304,7 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
             Err(e) => {
                 eprintln!("[{}]:   ⚠ {}: {e}", timestamp(), item.slug);
                 continue;
-            }
+            },
         };
 
         for order in &orders {
@@ -307,7 +339,11 @@ async fn run_search(args: SearchArgs, client: &RateLimitedClient, config: &Confi
     Ok(())
 }
 
-async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
+async fn run_ducats(
+    args: DucatsArgs,
+    client: &RateLimitedClient,
+    config: &Config,
+) -> Result<()> {
     let store = DataStore::new(client, config);
 
     eprintln!("[{}]: 📦 Loading item list...", timestamp());
@@ -345,7 +381,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
             Err(e) => {
                 eprintln!("[{}]:   ⚠ {}: {e}", timestamp(), item.slug);
                 continue;
-            }
+            },
         };
 
         for order in orders {
@@ -403,7 +439,10 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
     Ok(())
 }
 
-fn print_user_hits(username: &str, hits: &[Hit]) {
+fn print_user_hits(
+    username: &str,
+    hits: &[Hit],
+) {
     let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
     let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
     let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
@@ -447,7 +486,9 @@ async fn run_locations(
     let mis_list = store.missions().await?;
 
     // Relic values must have been built by `update`.
-    let relic_values: HashMap<String, RelicValue> = match cache::read(&cache::ducats_per_relic_path()) {
+    let relic_values: HashMap<String, RelicValue> = match cache::read(
+        &cache::ducats_per_relic_path(),
+    ) {
         Some(v) => v,
         None => bail!(
             "No relic value cache found. Please run `wfmq update` first to populate drop-source data."
@@ -471,10 +512,10 @@ async fn run_locations(
         match store.dropsources_cached(&relic.slug) {
             Some(sources) => {
                 relic_dropsources.insert(relic.slug.clone(), sources);
-            }
+            },
             None => {
                 missing += 1;
-            }
+            },
         }
     }
 
@@ -518,7 +559,11 @@ async fn run_locations(
     Ok(())
 }
 
-async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Config) -> Result<()> {
+async fn run_listen(
+    args: ListenArgs,
+    client: &RateLimitedClient,
+    config: &Config,
+) -> Result<()> {
     let store = DataStore::new(client, config);
 
     // Build item_id → (display name, ducats) for all prime parts.
@@ -564,7 +609,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
                 } else {
                     break;
                 }
-            }
+            },
             Err(_) => break,
         }
     }
@@ -597,7 +642,7 @@ async fn run_user_ducats(
         Err(e) => {
             eprintln!("[{}]:   ⚠ {e}", timestamp(),);
             return Err(anyhow!("{e}"));
-        }
+        },
     };
     if user.status != "ingame" {
         eprintln!(
@@ -612,7 +657,7 @@ async fn run_user_ducats(
         Err(e) => {
             eprintln!("[{}]:   ⚠ {e}", timestamp(),);
             return Err(anyhow!("{e}"));
-        }
+        },
     };
     let hits: Vec<_> = orders
         .iter()
@@ -654,7 +699,7 @@ fn order_to_hit(
 }
 
 async fn get_items_and_ducats(
-    store: &DataStore<'_>,
+    store: &DataStore<'_>
 ) -> Result<HashMap<String, (String, u32)>, anyhow::Error> {
     let items = store.items().await?;
     let items_by_id: HashMap<String, (String, u32)> = items
@@ -698,7 +743,7 @@ fn listen_one(
         Err(e) => {
             eprintln!("[{}]: ⚠  WebSocket error: {e}", timestamp());
             return Err(anyhow!("WebSocket error: {e}"));
-        }
+        },
     };
 
     // Server sends periodic pings; tungstenite auto-replies with pong.
@@ -707,7 +752,7 @@ fn listen_one(
         Message::Close(_) => {
             eprintln!("[{}]: 🔌 Server closed the connection.", timestamp());
             return Ok(false);
-        }
+        },
         _ => return Ok(true),
     };
 
@@ -716,7 +761,7 @@ fn listen_one(
         Err(_) => {
             eprintln!("[{}]: ⚠️  message text is not JSON: {text}", timestamp());
             return Ok(true);
-        }
+        },
     };
 
     // Only handle new-order events.
@@ -748,7 +793,7 @@ fn listen_one(
                 timestamp()
             );
             return Ok(true);
-        }
+        },
     };
 
     // --- Filters ---
@@ -783,21 +828,7 @@ fn listen_one(
         order.user.ingame_name, item_name, order.platinum,
     );
 
-    _ = std::thread::spawn(|| {
-        let mut sink_handle =
-            rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
-        sink_handle.log_on_drop(false);
-
-        let file = BufReader::new(File::open("sound.ogg").unwrap());
-        let player = rodio::play(sink_handle.mixer(), file).unwrap();
-        player.play();
-        let source =
-            rodio::Decoder::try_from(BufReader::new(File::open("sound.ogg").unwrap())).unwrap();
-        let duration = source
-            .total_duration()
-            .unwrap_or(std::time::Duration::from_secs(2));
-        std::thread::sleep(duration);
-    });
+    play_sound();
 
     println!(
         "🔔 {} | {}{PLATINUM} | {:.0} ducats/{PLATINUM} | x{} available | {}",
@@ -805,6 +836,32 @@ fn listen_one(
     );
     println!("[{}]:    {msg_out}\n", timestamp());
     Ok(true)
+}
+
+const SOUND_PATH: &str = "sound.ogg";
+
+/// Starts playing the sound on a background thread.
+/// Join the returned handle before exiting so the sound isn't cut off.
+fn play_sound() -> jod_thread::JoinHandle<()> {
+    jod_thread::spawn(|| {
+        if let Err(error) = try_play_sound() {
+            eprintln!("failed to play {SOUND_PATH}: {error:#}");
+        }
+    })
+}
+
+fn try_play_sound() -> anyhow::Result<()> {
+    let file = File::open(SOUND_PATH)
+        .with_context(|| format!("could not open sound file `{SOUND_PATH}`"))?;
+
+    let mut sink_handle = rodio::DeviceSinkBuilder::open_default_sink()
+        .context("could not open default audio output")?;
+    sink_handle.log_on_drop(false);
+
+    let player = rodio::play(sink_handle.mixer(), BufReader::new(file))
+        .context("could not decode sound file")?;
+    player.sleep_until_end();
+    Ok(())
 }
 
 fn username_quoted(username: &str) -> String {

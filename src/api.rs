@@ -3,7 +3,10 @@
 
 use anyhow::Result;
 
-use crate::{client::RateLimitedClient, models::*};
+use crate::{
+    client::RateLimitedClient,
+    models::*,
+};
 
 pub async fn get_items(client: &RateLimitedClient) -> Result<Vec<ItemShort>> {
     Ok(client
@@ -33,7 +36,10 @@ pub async fn get_missions(client: &RateLimitedClient) -> Result<Vec<Mission>> {
 }
 
 /// Dropsources live on v1, which uses a different response envelope.
-pub async fn get_dropsources(client: &RateLimitedClient, slug: &str) -> Result<Vec<DropSource>> {
+pub async fn get_dropsources(
+    client: &RateLimitedClient,
+    slug: &str,
+) -> Result<Vec<DropSource>> {
     let resp = client
         .get(&format!("/v1/items/{slug}/dropsources"))
         .await?
@@ -54,7 +60,10 @@ pub async fn get_orders_by_item(
         .data)
 }
 
-pub async fn get_orders_by_user(client: &RateLimitedClient, slug: &str) -> Result<Vec<Order>> {
+pub async fn get_orders_by_user(
+    client: &RateLimitedClient,
+    slug: &str,
+) -> Result<Vec<Order>> {
     Ok(client
         .get(&format!("/v2/orders/user/{slug}"))
         .await?
@@ -63,7 +72,10 @@ pub async fn get_orders_by_user(client: &RateLimitedClient, slug: &str) -> Resul
         .data)
 }
 
-pub async fn get_user(client: &RateLimitedClient, slug: &str) -> Result<User> {
+pub async fn get_user(
+    client: &RateLimitedClient,
+    slug: &str,
+) -> Result<User> {
     Ok(client
         .get(&format!("/v2/user/{slug}"))
         .await?

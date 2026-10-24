@@ -7,12 +7,18 @@
 
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     time::SystemTime,
 };
 
 use anyhow::Result;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{
+    Serialize,
+    de::DeserializeOwned,
+};
 
 // ---------------------------------------------------------------------------
 // Path helpers
@@ -60,13 +66,16 @@ pub fn read<T: DeserializeOwned>(path: &Path) -> Option<T> {
         Err(e) => {
             eprintln!("  ⚠ cache parse error in {}: {e}", path.display());
             None
-        }
+        },
     }
 }
 
 /// Serialise `data` to a pretty-printed JSON file, creating parent directories
 /// as needed. Errors are non-fatal — the caller should log them.
-pub fn write<T: Serialize>(path: &Path, data: &T) -> Result<()> {
+pub fn write<T: Serialize>(
+    path: &Path,
+    data: &T,
+) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -77,7 +86,10 @@ pub fn write<T: Serialize>(path: &Path, data: &T) -> Result<()> {
 
 /// Returns `true` if the file exists AND its last-modified time is within
 /// `max_age_minutes` of now.
-pub fn is_fresh(path: &Path, max_age_minutes: u64) -> bool {
+pub fn is_fresh(
+    path: &Path,
+    max_age_minutes: u64,
+) -> bool {
     let Ok(meta) = fs::metadata(path) else {
         return false;
     };

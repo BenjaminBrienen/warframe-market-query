@@ -12,10 +12,19 @@
 use anyhow::Result;
 
 use crate::{
-    api, cache,
+    api,
+    cache,
     client::RateLimitedClient,
     config::Config,
-    models::{DropSource, ItemShort, Location, Mission, Order, OrderWithUser, User},
+    models::{
+        DropSource,
+        ItemShort,
+        Location,
+        Mission,
+        Order,
+        OrderWithUser,
+        User,
+    },
 };
 
 pub struct DataStore<'a> {
@@ -24,7 +33,10 @@ pub struct DataStore<'a> {
 }
 
 impl<'a> DataStore<'a> {
-    pub fn new(client: &'a RateLimitedClient, config: &'a Config) -> Self {
+    pub fn new(
+        client: &'a RateLimitedClient,
+        config: &'a Config,
+    ) -> Self {
         Self { client, config }
     }
 
@@ -62,13 +74,19 @@ impl<'a> DataStore<'a> {
 
     /// Loads dropsource data for one item from cache only.
     /// Returns `None` if no cache file exists (caller should prompt `update`).
-    pub fn dropsources_cached(&self, slug: &str) -> Option<Vec<DropSource>> {
+    pub fn dropsources_cached(
+        &self,
+        slug: &str,
+    ) -> Option<Vec<DropSource>> {
         cache::read(&cache::dropsources_path(slug))
     }
 
     // ---- Dynamic data (TTL-based) ------------------------------------------
 
-    pub async fn orders_by_item(&self, slug: &str) -> Result<Vec<OrderWithUser>> {
+    pub async fn orders_by_item(
+        &self,
+        slug: &str,
+    ) -> Result<Vec<OrderWithUser>> {
         let path = cache::orders_item_path(slug);
         if cache::is_fresh(&path, self.config.orders_cache_minutes) {
             if let Some(cached) = cache::read(&path) {
@@ -80,7 +98,10 @@ impl<'a> DataStore<'a> {
         Ok(data)
     }
 
-    pub async fn orders_by_user(&self, slug: &str) -> Result<Vec<Order>> {
+    pub async fn orders_by_user(
+        &self,
+        slug: &str,
+    ) -> Result<Vec<Order>> {
         let path = cache::orders_user_path(slug);
         if cache::is_fresh(&path, self.config.orders_cache_minutes) {
             if let Some(cached) = cache::read(&path) {
@@ -92,7 +113,10 @@ impl<'a> DataStore<'a> {
         Ok(data)
     }
 
-    pub async fn user(&self, slug: &str) -> Result<User> {
+    pub async fn user(
+        &self,
+        slug: &str,
+    ) -> Result<User> {
         let path = cache::user_path(slug);
         if cache::is_fresh(&path, self.config.orders_cache_minutes) {
             if let Some(cached) = cache::read(&path) {

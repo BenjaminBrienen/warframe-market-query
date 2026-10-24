@@ -1,5 +1,9 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// Standard v2 response wrapper.
 #[derive(Deserialize)]
@@ -68,6 +72,7 @@ impl Location {
     pub fn node_name(&self) -> Option<&str> {
         self.i18n.as_ref()?.get("en").map(|e| e.node_name.as_str())
     }
+
     pub fn system_name(&self) -> Option<&str> {
         self.i18n.as_ref()?.get("en")?.system_name.as_deref()
     }
