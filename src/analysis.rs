@@ -35,6 +35,8 @@ pub struct RelicValue {
 // Step 1
 // ---------------------------------------------------------------------------
 
+type RelicProbabilities = (u32, f32, f32, f32, f32);
+
 /// Build a map from relic item-ID → expected ducat value at each refinement.
 ///
 /// Input:  prime parts (items where ducats > 0)  +  their cached dropsources.
@@ -44,7 +46,7 @@ pub fn build_relic_values(
     dropsources_by_slug: &HashMap<String, Vec<DropSource>>,
 ) -> HashMap<String, RelicValue> {
     // relic_id  →  list of (ducats, intact%, exceptional%, flawless%, radiant%)
-    let mut contents: HashMap<String, Vec<(u32, f32, f32, f32, f32)>> = HashMap::new();
+    let mut contents: HashMap<String, Vec<RelicProbabilities>> = HashMap::new();
 
     for part in prime_parts {
         let ducats = match part.ducats {

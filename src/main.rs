@@ -173,7 +173,7 @@ async fn run_update(args: UpdateArgs, client: &RateLimitedClient, _config: &Conf
     }
 
     let to_fetch: Vec<_> = if args.force {
-        targets.iter().copied().collect()
+        targets.to_vec()
     } else {
         targets
             .iter()
@@ -403,7 +403,7 @@ async fn run_ducats(args: DucatsArgs, client: &RateLimitedClient, config: &Confi
     Ok(())
 }
 
-fn print_user_hits(username: &str, hits: &Vec<Hit>) {
+fn print_user_hits(username: &str, hits: &[Hit]) {
     let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
     let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
     let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
@@ -554,7 +554,7 @@ async fn run_listen(args: ListenArgs, client: &RateLimitedClient, config: &Confi
         },
         "id": "wfmq-listen-1"
     });
-    ws.send(Message::Text(sub.to_string())).await?;
+    ws.send(Message::Text(sub.to_string().into())).await?;
 
     while let Some(raw) = ws.next().await {
         match listen_one(raw, &items_by_id, args.ratio) {
@@ -641,10 +641,7 @@ fn order_to_hit(
     if order.platinum == 0 {
         return None;
     }
-    let (item_name, ducats) = match items_by_id.get(&order.item_id) {
-        Some(value) => value,
-        None => return None,
-    };
+    let (item_name, ducats) = items_by_id.get(&order.item_id)?;
     if (*ducats as f32 / order.platinum as f32) < ratio {
         return None;
     }
