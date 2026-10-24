@@ -107,6 +107,9 @@ struct SearchArgs {
     /// Comma-separated item tags that must ALL match.  E.g. --tags prime,relic
     #[arg(long)]
     tags: Option<String>,
+
+    #[clap(long, short, action)]
+    include_offline: bool,
 }
 
 #[derive(Args)]
@@ -119,6 +122,9 @@ struct DucatsArgs {
     /// qualifying listings.  Prevents wasting a daily trade slot.
     #[arg(long, default_value = "6")]
     quantity: u32,
+
+    #[clap(long, short, action)]
+    include_offline: bool,
 }
 
 #[derive(Args)]
@@ -308,7 +314,7 @@ async fn run_search(
         };
 
         for order in &orders {
-            if order.user.status != "ingame" {
+            if order.user.status != "ingame" && !args.include_offline {
                 continue;
             }
             if order.r#type != args.r#type {
@@ -388,7 +394,7 @@ async fn run_ducats(
             if order.r#type != "sell" {
                 continue;
             }
-            if order.user.status != "ingame" {
+            if order.user.status != "ingame" && !args.include_offline {
                 continue;
             }
             if order.platinum == 0 {
