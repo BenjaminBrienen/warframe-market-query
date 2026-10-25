@@ -1,5 +1,6 @@
 mod analysis;
 mod api;
+mod bans;
 mod cache;
 mod client;
 mod config;
@@ -7,7 +8,10 @@ mod data;
 mod models;
 
 use std::{
-    collections::HashMap,
+    collections::{
+        self,
+        HashMap,
+    },
     fs::File,
     io::BufReader,
 };
@@ -73,8 +77,20 @@ enum Commands {
     /// Find out what is worth trading from the user for ducats.
     UserDucats(UserArgs),
 
-    /// Test sound effect
+    /// Test sound effect.
     PlaySound(()),
+
+    /// Ban a user (do not want to trade with them).
+    Ban(BanArgs),
+
+    /// Unban a user.
+    Unban(BanArgs),
+}
+
+#[derive(Args)]
+struct BanArgs {
+    /// Username of the user to ban.
+    username: String,
 }
 
 #[derive(Args)]
@@ -164,6 +180,8 @@ async fn main() -> Result<()> {
             play_sound();
             Ok(())
         },
+        Commands::Ban(args) => run_ban(args, &client, &config).await,
+        Commands::Unban(args) => run_unban(args, &client, &config).await,
     }
 }
 
@@ -317,6 +335,9 @@ async fn run_search(
             if order.user.status != "ingame" && !args.include_offline {
                 continue;
             }
+            if bans::get().contains(&order.user.ingame_name) {
+                continue;
+            }
             if order.r#type != args.r#type {
                 continue;
             }
@@ -438,44 +459,13 @@ async fn run_ducats(
         qualified.len()
     );
 
-    for (username, hits) in &qualified {
+    let bans = bans::get();
+
+    for (username, hits) in without_bans(&qualified, bans) {
         print_user_hits(username, hits);
     }
 
     Ok(())
-}
-
-fn print_user_hits(
-    username: &str,
-    hits: &[Hit],
-) {
-    let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
-    let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
-    let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
-    let total_ratio = total_ducats as f32 / total_plat as f32;
-    eprintln!(
-        "👤 {username} — {total_qty} items, {total_plat}{PLATINUM} total, ~{total_ducats} ducats, {total_ratio} ducats/{PLATINUM}",
-        username = username_quoted(username),
-    );
-
-    let item_parts: Vec<String> = hits
-        .iter()
-        .map(|h| format!("{}x {} ({}{PLATINUM})", h.quantity, h.item_name, h.platinum))
-        .collect();
-
-    let msg = format!(
-        "/w {} Hi! I'd like to buy: {} (warframe.market via wfmq)",
-        username_quoted(username),
-        item_parts.join(", ")
-    );
-
-    if msg.len() > 255 {
-        eprintln!(
-            "  ⚠  Message is {} chars — Warframe may truncate it.",
-            msg.len()
-        );
-    }
-    println!("[{}]: {msg}", timestamp());
 }
 
 async fn run_locations(
@@ -658,6 +648,9 @@ async fn run_user_ducats(
         );
         return Ok(());
     }
+    if bans::get().contains(&args.username) {
+        eprintln!("  ⚠  User {} is banned!", args.username);
+    }
     let orders = match store.orders_by_user(&user.slug).await {
         Ok(o) => o,
         Err(e) => {
@@ -679,6 +672,55 @@ async fn run_user_ducats(
         print_user_hits(&args.username, &hits);
     }
     Ok(())
+}
+
+async fn run_ban(
+    args: BanArgs,
+    _client: &RateLimitedClient,
+    _config: &Config,
+) -> Result<()> {
+    bans::add(&args.username)
+}
+
+async fn run_unban(
+    args: BanArgs,
+    _client: &RateLimitedClient,
+    _config: &Config,
+) -> Result<()> {
+    bans::remove(&args.username)
+}
+
+fn print_user_hits(
+    username: &str,
+    hits: &[Hit],
+) {
+    let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
+    let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
+    let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
+    let total_ratio = total_ducats as f32 / total_plat as f32;
+    eprintln!(
+        "👤 {username} — {total_qty} items, {total_plat}{PLATINUM} total, ~{total_ducats} ducats, {total_ratio} ducats/{PLATINUM}",
+        username = username_quoted(username),
+    );
+
+    let item_parts: Vec<String> = hits
+        .iter()
+        .map(|h| format!("{}x {} ({}{PLATINUM})", h.quantity, h.item_name, h.platinum))
+        .collect();
+
+    let msg = format!(
+        "/w {} Hi! I'd like to buy: {} (warframe.market via wfmq)",
+        username_quoted(username),
+        item_parts.join(", ")
+    );
+
+    if msg.len() > 255 {
+        eprintln!(
+            "  ⚠  Message is {} chars — Warframe may truncate it.",
+            msg.len()
+        );
+    }
+    println!("[{}]: {msg}", timestamp());
 }
 
 fn order_to_hit(
@@ -812,6 +854,10 @@ fn listen_one(
         return Ok(true);
     }
 
+    if bans::get().contains(&order.user.ingame_name) {
+        return Ok(true);
+    }
+
     // early return if item is not a prime part with a ducat value
     let Some((item_name, ducats)) = items_with_ducats_by_id.get(&order.item_id) else {
         return Ok(true);
@@ -876,4 +922,11 @@ fn username_quoted(username: &str) -> String {
     } else {
         username.to_string()
     }
+}
+
+fn without_bans<'a>(
+    qualified: &'a [(String, Vec<Hit>)],
+    bans: collections::HashSet<String>,
+) -> impl Iterator<Item = &'a (String, Vec<Hit>)> + 'a {
+    qualified.iter().filter(move |item| !bans.contains(&item.0))
 }
