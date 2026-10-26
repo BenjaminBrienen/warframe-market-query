@@ -38,8 +38,7 @@ impl ItemShort {
     pub fn name(&self) -> &str {
         self.i18n
             .as_ref()
-            .map(|i| i.en.name.as_str())
-            .unwrap_or(&self.slug)
+            .map_or(&self.slug, |i18n| i18n.en.name.as_str())
     }
 }
 
@@ -70,7 +69,10 @@ pub struct Location {
 
 impl Location {
     pub fn node_name(&self) -> Option<&str> {
-        self.i18n.as_ref()?.get("en").map(|e| e.node_name.as_str())
+        self.i18n
+            .as_ref()?
+            .get("en")
+            .map(|english| english.node_name.as_str())
     }
 
     pub fn system_name(&self) -> Option<&str> {
@@ -80,6 +82,7 @@ impl Location {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+#[expect(clippy::struct_field_names, reason = "serialize interface")]
 pub struct LocationI18n {
     pub node_name: String,
     #[serde(default)]
@@ -96,7 +99,10 @@ pub struct Mission {
 
 impl Mission {
     pub fn name(&self) -> Option<&str> {
-        self.i18n.as_ref()?.get("en").map(|e| e.name.as_str())
+        self.i18n
+            .as_ref()?
+            .get("en")
+            .map(|english| english.name.as_str())
     }
 }
 
@@ -107,11 +113,9 @@ pub struct MissionI18n {
 
 /// Unified struct for both drop-source shapes:
 ///
-/// type = "relic"   → prime part found inside a relic
-///   fields: relic (relic item-id), rates
+/// type = "relic"   → prime part found inside a relic.
 ///
-/// type = "mission" → relic/item found in a mission rotation
-///   fields: location, mission, rate, rarity, rotation (optional)
+/// type = "mission" → relic/item found in a mission rotation.
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct DropSource {
     #[serde(rename = "type")]
@@ -202,7 +206,7 @@ pub struct Order {
     /// Is the unique identifier of the item involved in the order.
     pub item_id: String,
 
-    /// User-defined group to which the order belongs
+    /// User-defined group to which the order belongs.
     pub group: Option<String>,
 }
 

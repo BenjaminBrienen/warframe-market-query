@@ -15,7 +15,7 @@ use crate::{
 };
 
 pub async fn run(
-    arguments: SearchArguments,
+    arguments: &SearchArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -24,7 +24,11 @@ pub async fn run(
     let required_tags: Vec<String> = arguments
         .tags
         .as_deref()
-        .map(|t| t.split(',').map(|s| s.trim().to_lowercase()).collect())
+        .map(|tags| {
+            tags.split(',')
+                .map(|tag| tag.trim().to_lowercase())
+                .collect()
+        })
         .unwrap_or_default();
 
     eprintln!("[{}]: 📦 Loading item list...", timestamp());
@@ -44,14 +48,14 @@ pub async fn run(
         eta_secs(items.len())
     );
 
-    let mut hits = 0usize;
-    for (i, item) in items.iter().enumerate() {
-        log_progress(i + 1, items.len(), "scanned");
+    let mut hits = 0_usize;
+    for (index, item) in items.iter().enumerate() {
+        log_progress(index + 1, items.len(), "scanned");
 
         let orders = match store.orders_by_item(&item.slug).await {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("[{}]:   ⚠ {}: {e}", timestamp(), item.slug);
+            Ok(order) => order,
+            Err(error) => {
+                eprintln!("[{}]:   ⚠ {}: {error}", timestamp(), item.slug);
                 continue;
             },
         };

@@ -1,16 +1,4 @@
 //! Ducat-farming analysis built entirely from cached data.
-//!
-//! Step 1 — build_relic_values
-//!   For each prime part, its dropsources list which relics contain it and at
-//!   what rates (intact / exceptional / flawless / radiant).  Aggregating
-//!   across all prime parts gives the expected-ducat value of opening each
-//!   relic at each refinement level.
-//!
-//! Step 2 — build_mission_scores
-//!   For each relic, its dropsources list which missions drop it and at what
-//!   rate.  Multiplying (relic drop rate × relic intact value) and summing
-//!   over all relics gives expected ducats per run for each
-//!   (location, mission, rotation) combination.
 
 use std::collections::HashMap;
 
@@ -46,9 +34,6 @@ pub struct RelicValue {
 type RelicProbabilities = (u32, f32, f32, f32, f32);
 
 /// Build a map from relic item-ID → expected ducat value at each refinement.
-///
-/// Input:  prime parts (items where ducats > 0)  +  their cached dropsources.
-/// Output: HashMap<relic_id, RelicValue>
 pub fn build_relic_values(
     prime_parts: &[&ItemShort],
     dropsources_by_slug: &HashMap<String, Vec<DropSource>>,
@@ -58,7 +43,7 @@ pub fn build_relic_values(
 
     for part in prime_parts {
         let ducats = match part.ducats {
-            Some(d) if d > 0 => d,
+            Some(ducats) if ducats > 0 => ducats,
             _ => continue,
         };
 
@@ -70,10 +55,10 @@ pub fn build_relic_values(
             if source.r#type != "relic" {
                 continue;
             }
-            let Some(ref relic_id) = source.relic else {
+            let Some(relic_id) = &source.relic else {
                 continue;
             };
-            let Some(ref rates) = source.rates else {
+            let Some(rates) = &source.rates else {
                 continue;
             };
 
@@ -93,19 +78,19 @@ pub fn build_relic_values(
             let value = RelicValue {
                 intact: parts
                     .iter()
-                    .map(|&(d, r, _, _, _)| d as f32 * r / 100.0)
+                    .map(|&(ducats, rate, _, _, _)| ducats as f32 * rate / 100.0)
                     .sum(),
                 exceptional: parts
                     .iter()
-                    .map(|&(d, _, r, _, _)| d as f32 * r / 100.0)
+                    .map(|&(ducats, _, rate, _, _)| ducats as f32 * rate / 100.0)
                     .sum(),
                 flawless: parts
                     .iter()
-                    .map(|&(d, _, _, r, _)| d as f32 * r / 100.0)
+                    .map(|&(ducats, _, _, rate, _)| ducats as f32 * rate / 100.0)
                     .sum(),
                 radiant: parts
                     .iter()
-                    .map(|&(d, _, _, _, r)| d as f32 * r / 100.0)
+                    .map(|&(ducats, _, _, _, rate)| ducats as f32 * rate / 100.0)
                     .sum(),
             };
             (relic_id, value)
@@ -148,19 +133,20 @@ pub fn build_mission_scores(
             if source.r#type != "mission" {
                 continue;
             }
-            let Some(ref loc_id) = source.location else {
+            let Some(loc_id) = &source.location else {
                 continue;
             };
-            let Some(ref mis_id) = source.mission else {
+            let Some(mis_id) = &source.mission else {
                 continue;
             };
             let Some(rate) = source.rate else { continue };
 
             // Normalise rotation to uppercase for consistent grouping.
-            let rotation = source.rotation.as_deref().map(|r| r.to_uppercase());
+            let rotation = source.rotation.as_deref().map(str::to_uppercase);
             let key = (loc_id.clone(), mis_id.clone(), rotation);
 
-            *scores.entry(key).or_default() += rate / 100.0 * value.intact;
+            let increase = rate / 100.0 * value.intact;
+            *scores.entry(key).or_default() += increase;
         }
     }
 
@@ -176,9 +162,10 @@ pub fn build_mission_scores(
         )
         .collect();
 
-    result.sort_by(|a, b| {
-        b.expected_ducats
-            .partial_cmp(&a.expected_ducats)
+    result.sort_by(|first, other| {
+        other
+            .expected_ducats
+            .partial_cmp(&first.expected_ducats)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
@@ -195,20 +182,22 @@ pub fn format_score(
     missions: &HashMap<String, Mission>,
 ) -> String {
     let location = locations.get(&score.location_id);
-    let mis = missions.get(&score.mission_id);
+    let mission = missions.get(&score.mission_id);
 
-    let system = location.and_then(|l| l.system_name()).unwrap_or("?");
+    let system = location
+        .and_then(|location| location.system_name())
+        .unwrap_or("?");
 
     let node = location
-        .and_then(|l| l.node_name())
+        .and_then(|location| location.node_name())
         .unwrap_or(score.location_id.as_str());
 
-    let mission_name = mis
-        .and_then(|m| m.name())
+    let mission_name = mission
+        .and_then(|mission| mission.name())
         .unwrap_or(score.mission_id.as_str());
 
     let rotation_str = match &score.rotation {
-        Some(r) => format!(" / {r}"),
+        Some(rotation) => format!(" / {rotation}"),
         None => String::new(),
     };
 

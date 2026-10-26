@@ -30,17 +30,17 @@ const MAX_CONSECUTIVE_FAILURES: usize = 5;
 
 /// Price in platinum for a buy order on an item worth `ducats`.
 /// Items with any other ducat value are skipped.
-pub fn price_for_ducats(ducats: u32) -> Option<u32> {
+pub const fn price_for_ducats(ducats: u32) -> Option<u32> {
     match ducats {
         45 => Some(2),
         100 => Some(5),
-        d if d > 100 => Some(6),
+        ducats if ducats > 100 => Some(6),
         _ => None,
     }
 }
 
 pub async fn run(
-    arguments: BuyOrdersArguments,
+    arguments: &BuyOrdersArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -91,12 +91,12 @@ pub async fn run(
         eta_secs(planned.len())
     );
 
-    let mut created = 0usize;
-    let mut already_existed = 0usize;
-    let mut failed = 0usize;
-    let mut consecutive_failures = 0usize;
+    let mut created = 0_usize;
+    let mut already_existed = 0_usize;
+    let mut failed = 0_usize;
+    let mut consecutive_failures = 0_usize;
 
-    for (i, (item, ducats, platinum)) in planned.iter().enumerate() {
+    for (index, (item, ducats, platinum)) in planned.iter().enumerate() {
         match api::create_buy_order(client, config, &item.id, *platinum, QUANTITY).await {
             Ok(OrderOutcome::Created) => {
                 created += 1;
@@ -133,7 +133,7 @@ pub async fn run(
                 }
             },
         }
-        log_progress(i + 1, planned.len(), "processed");
+        log_progress(index + 1, planned.len(), "processed");
     }
 
     eprintln!(

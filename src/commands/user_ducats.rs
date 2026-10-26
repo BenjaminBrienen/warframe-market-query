@@ -22,7 +22,7 @@ use crate::{
 };
 
 pub async fn run(
-    arguments: UserArguments,
+    arguments: &UserArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -41,10 +41,10 @@ pub async fn run(
 
     let cursed_user_slug = ingame_name_to_user_slug_hack(&arguments.username);
     let user = match store.user(&cursed_user_slug).await {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("[{}]:   ⚠ {e}", timestamp());
-            return Err(anyhow!("{e}"));
+        Ok(user) => user,
+        Err(error) => {
+            eprintln!("[{}]:   ⚠ {error}", timestamp());
+            return Err(anyhow!("{error}"));
         },
     };
     if user.status != "ingame" {
@@ -59,10 +59,10 @@ pub async fn run(
         eprintln!("  ⚠  User {} is banned!", arguments.username);
     }
     let orders = match store.orders_by_user(&user.slug).await {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("[{}]:   ⚠ {e}", timestamp());
-            return Err(anyhow!("{e}"));
+        Ok(order) => order,
+        Err(error) => {
+            eprintln!("[{}]:   ⚠ {error}", timestamp());
+            return Err(anyhow!("{error}"));
         },
     };
     let hits: Vec<_> = orders

@@ -3,7 +3,7 @@ use std::{
     io::BufReader,
 };
 
-use anyhow::Context;
+use anyhow::Context as _;
 
 const SOUND_PATH: &str = "sound.ogg";
 

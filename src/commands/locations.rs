@@ -20,7 +20,7 @@ use crate::{
 };
 
 pub async fn run(
-    arguments: LocationsArguments,
+    arguments: &LocationsArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -29,14 +29,14 @@ pub async fn run(
     // These three are quick and auto-fetch if needed.
     eprintln!("[{}]: 📦 Loading game data...", timestamp());
     let items = store.items().await?;
-    let locs_list = store.locations().await?;
-    let mis_list = store.missions().await?;
+    let locations = store.locations().await?;
+    let missions = store.missions().await?;
 
     // Relic values must have been built by `update`.
     let relic_values: HashMap<String, RelicValue> = match cache::read(
         &cache::ducats_per_relic_path(),
     ) {
-        Some(v) => v,
+        Some(value) => value,
         None => bail!(
             "No relic value cache found. Please run `wfmq update` first to populate drop-source data."
         ),
@@ -44,7 +44,7 @@ pub async fn run(
 
     let relics: Vec<_> = items
         .iter()
-        .filter(|i| i.tags.contains(&"relic".to_string()))
+        .filter(|item| item.tags.contains(&"relic".to_owned()))
         .collect();
     eprintln!(
         "[{}]: 🗺️  Loading dropsources for {} relics...",
@@ -53,7 +53,7 @@ pub async fn run(
     );
 
     let mut relic_dropsources: HashMap<String, Vec<DropSource>> = HashMap::new();
-    let mut missing = 0usize;
+    let mut missing = 0_usize;
 
     for relic in &relics {
         match store.dropsources_cached(&relic.slug) {
@@ -73,25 +73,28 @@ pub async fn run(
     }
 
     // Build lookup maps keyed by ID.
-    let locations_map: HashMap<String, _> =
-        locs_list.into_iter().map(|l| (l.id.clone(), l)).collect();
-    let missions_map: HashMap<String, _> =
-        mis_list.into_iter().map(|m| (m.id.clone(), m)).collect();
+    let locations_map: HashMap<String, _> = locations
+        .into_iter()
+        .map(|location| (location.id.clone(), location))
+        .collect();
+    let missions_map: HashMap<String, _> = missions
+        .into_iter()
+        .map(|mission| (mission.id.clone(), mission))
+        .collect();
 
     let scores = analysis::build_mission_scores(&relics, &relic_dropsources, &relic_values);
 
     // Filter out entries where we couldn't resolve at least the location name.
     let resolved: Vec<_> = scores
         .iter()
-        .filter(|s| locations_map.contains_key(&s.location_id))
+        .filter(|score| locations_map.contains_key(&score.location_id))
         .collect();
 
     let total = resolved.len();
     eprintln!(
-        "[{}]: 🏆 Showing top {} of {} location/rotation combinations (intact relics):\n",
+        "[{}]: 🏆 Showing top {} of {total} location/rotation combinations (intact relics):\n",
         timestamp(),
-        arguments.limit.min(total),
-        total
+        arguments.limit.min(total)
     );
 
     for score in resolved.iter().take(arguments.limit) {

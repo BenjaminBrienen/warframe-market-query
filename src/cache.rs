@@ -59,12 +59,15 @@ pub fn user_path(slug: &str) -> PathBuf {
 
 /// Deserialise a cached JSON file. Returns `None` if the file is absent or
 /// malformed (caller decides whether that warrants a warning).
-pub fn read<T: DeserializeOwned>(path: &Path) -> Option<T> {
+pub fn read<Target>(path: &Path) -> Option<Target>
+where
+    Target: DeserializeOwned,
+{
     let text = fs::read_to_string(path).ok()?;
     match serde_json::from_str(&text) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            eprintln!("  ⚠ cache parse error in {}: {e}", path.display());
+        Ok(value) => Some(value),
+        Err(error) => {
+            eprintln!("  ⚠ cache parse error in {}: {error}", path.display());
             None
         },
     }
@@ -72,10 +75,13 @@ pub fn read<T: DeserializeOwned>(path: &Path) -> Option<T> {
 
 /// Serialise `data` to a pretty-printed JSON file, creating parent directories
 /// as needed. Errors are non-fatal — the caller should log them.
-pub fn write<T: Serialize>(
+pub fn write<Data>(
     path: &Path,
-    data: &T,
-) -> Result<()> {
+    data: &Data,
+) -> Result<()>
+where
+    Data: Serialize,
+{
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }

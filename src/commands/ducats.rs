@@ -22,7 +22,7 @@ use crate::{
 };
 
 pub async fn run(
-    arguments: DucatsArguments,
+    arguments: &DucatsArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -33,7 +33,7 @@ pub async fn run(
         .items()
         .await?
         .into_iter()
-        .filter(|i| positive_ducats(i.ducats).is_some())
+        .filter(|item| positive_ducats(item.ducats).is_some())
         .collect();
 
     eprintln!(
@@ -46,14 +46,14 @@ pub async fn run(
 
     let mut by_seller: HashMap<String, Vec<Hit>> = HashMap::new();
 
-    for (i, item) in ducat_items.iter().enumerate() {
-        log_progress(i + 1, ducat_items.len(), "scanned");
+    for (index, item) in ducat_items.iter().enumerate() {
+        log_progress(index + 1, ducat_items.len(), "scanned");
 
         let ducats = item.ducats.unwrap_or(0);
         let orders = match store.orders_by_item(&item.slug).await {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("[{}]:   ⚠ {}: {e}", timestamp(), item.slug);
+            Ok(order) => order,
+            Err(error) => {
+                eprintln!("[{}]:   ⚠ {}: {error}", timestamp(), item.slug);
                 continue;
             },
         };
@@ -85,18 +85,18 @@ pub async fn run(
 
     let mut qualified: Vec<(String, Vec<Hit>)> = by_seller
         .into_iter()
-        .filter(|(_, hits)| hits.iter().map(|h| h.quantity).sum::<u32>() >= arguments.quantity)
+        .filter(|(_, hits)| hits.iter().map(|hit| hit.quantity).sum::<u32>() >= arguments.quantity)
         .collect();
 
     // Sort by weighted ducat efficiency descending.
-    qualified.sort_by(|(_, a), (_, b)| {
-        let score = |hits: &[Hit]| -> f32 {
+    qualified.sort_by(|(_, first_hits), (_, other_hits)| {
+        let metric = |hits: &[Hit]| -> f32 {
             hits.iter()
-                .map(|h| h.ducats as f32 / h.platinum as f32 * h.quantity as f32)
+                .map(|hit| hit.ducats as f32 / hit.platinum as f32 * hit.quantity as f32)
                 .sum()
         };
-        score(b)
-            .partial_cmp(&score(a))
+        metric(other_hits)
+            .partial_cmp(&metric(first_hits))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 

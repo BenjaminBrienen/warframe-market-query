@@ -33,7 +33,7 @@ pub fn username_quoted(username: &str) -> String {
     if username.contains(' ') {
         format!("\"{username}\"")
     } else {
-        username.to_string()
+        username.to_owned()
     }
 }
 
@@ -42,7 +42,7 @@ pub fn ingame_name_to_user_slug_hack(ingame_name: &str) -> String {
         .chars()
         .map(|character| match character {
             ' ' | '.' => '-',
-            c => c.to_ascii_lowercase(),
+            character => character.to_ascii_lowercase(),
         })
         .collect()
 }

@@ -5,10 +5,10 @@ use crate::{
     cli::BanArguments,
 };
 
-pub fn ban(arguments: BanArguments) -> Result<()> {
+pub fn ban(arguments: &BanArguments) -> Result<()> {
     bans::add(&arguments.username)
 }
 
-pub fn unban(arguments: BanArguments) -> Result<()> {
+pub fn unban(arguments: &BanArguments) -> Result<()> {
     bans::remove(&arguments.username)
 }

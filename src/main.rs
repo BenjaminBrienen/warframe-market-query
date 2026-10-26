@@ -13,7 +13,7 @@ mod sound;
 mod util;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::Parser as _;
 use cli::{
     Cli,
     Commands,
@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     let config = Config::load();
     let client = RateLimitedClient::new();
 
-    match cli.command {
+    match &cli.command {
         Commands::Update(arguments) => commands::update::run(arguments, &client).await,
         Commands::Search(arguments) => commands::search::run(arguments, &client, &config).await,
         Commands::Ducats(arguments) => commands::ducats::run(arguments, &client, &config).await,

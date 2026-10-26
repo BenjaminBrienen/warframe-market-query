@@ -12,7 +12,7 @@ pub struct Config {
     /// Session JWT read from `auth.txt`, needed for commands that change
     /// your account (`buy-orders`). Never read from `wfmq.json`.
     #[serde(skip)]
-    auth_token: Option<String>,
+    pub auth_token: Option<String>,
 }
 
 impl Default for Config {
@@ -32,12 +32,11 @@ impl Config {
     }
 
     fn load_json() -> Self {
-        let text = match std::fs::read_to_string("wfmq.json") {
-            Ok(t) => t,
-            Err(_) => return Self::default(),
+        let Ok(text) = std::fs::read_to_string("wfmq.json") else {
+            return Self::default();
         };
-        serde_json::from_str(&text).unwrap_or_else(|e| {
-            eprintln!("⚠  wfmq.json is invalid ({e}), using defaults.");
+        serde_json::from_str(&text).unwrap_or_else(|error| {
+            eprintln!("⚠  wfmq.json is invalid ({error}), using defaults.");
             Self::default()
         })
     }

@@ -33,7 +33,7 @@ pub struct DataStore<'state> {
 }
 
 impl<'state> DataStore<'state> {
-    pub fn new(
+    pub const fn new(
         client: &'state RateLimitedClient,
         config: &'state Config,
     ) -> Self {
@@ -74,6 +74,7 @@ impl<'state> DataStore<'state> {
 
     /// Loads dropsource data for one item from cache only.
     /// Returns `None` if no cache file exists (caller should prompt `update`).
+    #[expect(clippy::unused_self, reason = "intentional API")]
     pub fn dropsources_cached(
         &self,
         slug: &str,
@@ -88,10 +89,10 @@ impl<'state> DataStore<'state> {
         slug: &str,
     ) -> Result<Vec<OrderWithUser>> {
         let path = cache::orders_item_path(slug);
-        if cache::is_fresh(&path, self.config.orders_cache_minutes) {
-            if let Some(cached) = cache::read(&path) {
-                return Ok(cached);
-            }
+        if cache::is_fresh(&path, self.config.orders_cache_minutes)
+            && let Some(cached) = cache::read(&path)
+        {
+            return Ok(cached);
         }
         let data = api::get_orders_by_item(self.client, slug).await?;
         drop(cache::write(&path, &data));
@@ -103,10 +104,10 @@ impl<'state> DataStore<'state> {
         slug: &str,
     ) -> Result<Vec<Order>> {
         let path = cache::orders_user_path(slug);
-        if cache::is_fresh(&path, self.config.orders_cache_minutes) {
-            if let Some(cached) = cache::read(&path) {
-                return Ok(cached);
-            }
+        if cache::is_fresh(&path, self.config.orders_cache_minutes)
+            && let Some(cached) = cache::read(&path)
+        {
+            return Ok(cached);
         }
         let data = api::get_orders_by_user(self.client, slug).await?;
         drop(cache::write(&path, &data));
@@ -118,10 +119,10 @@ impl<'state> DataStore<'state> {
         slug: &str,
     ) -> Result<User> {
         let path = cache::user_path(slug);
-        if cache::is_fresh(&path, self.config.orders_cache_minutes) {
-            if let Some(cached) = cache::read(&path) {
-                return Ok(cached);
-            }
+        if cache::is_fresh(&path, self.config.orders_cache_minutes)
+            && let Some(cached) = cache::read(&path)
+        {
+            return Ok(cached);
         }
         let data = api::get_user(self.client, slug).await?;
         drop(cache::write(&path, &data));

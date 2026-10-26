@@ -83,7 +83,7 @@ pub struct SearchArguments {
     #[arg(long)]
     pub quantity: Option<u32>,
 
-    /// Comma-separated item tags that must ALL match.  E.g. --tags prime,relic
+    /// Comma-separated item tags that must ALL match. For example: `--tags prime,relic`.
     #[arg(long)]
     pub tags: Option<String>,
 

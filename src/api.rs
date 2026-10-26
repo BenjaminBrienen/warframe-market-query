@@ -10,7 +10,17 @@ use serde::Serialize;
 use crate::{
     client::RateLimitedClient,
     config::Config,
-    models::*,
+    models::{
+        ApiResponse,
+        DropSource,
+        ItemShort,
+        Location,
+        Mission,
+        Order,
+        OrderWithUser,
+        User,
+        V1DropSourcesResponse,
+    },
 };
 
 pub async fn get_items(client: &RateLimitedClient) -> Result<Vec<ItemShort>> {
@@ -91,10 +101,10 @@ pub async fn get_user(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct NewOrder<'a> {
-    item_id: &'a str,
+struct NewOrder<'data> {
+    item_id: &'data str,
     #[serde(rename = "type")]
-    r#type: &'a str,
+    r#type: &'data str,
     platinum: u32,
     quantity: u32,
     visible: bool,

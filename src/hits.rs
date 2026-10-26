@@ -23,14 +23,14 @@ pub struct Hit {
     pub ducats: u32,
 }
 
-/// item_id → (display name, ducats) for every item that is worth ducats.
+/// `item_id → (display name, ducats)` for every item that is worth ducats.
 pub async fn items_with_ducats(store: &DataStore<'_>) -> Result<HashMap<String, (String, u32)>> {
     let items = store.items().await?;
     let items_by_id = items
         .iter()
-        .filter_map(|i| {
-            let ducats = positive_ducats(i.ducats)?;
-            Some((i.id.clone(), (i.name().to_owned(), ducats)))
+        .filter_map(|item| {
+            let ducats = positive_ducats(item.ducats)?;
+            Some((item.id.clone(), (item.name().to_owned(), ducats)))
         })
         .collect();
     Ok(items_by_id)
@@ -53,8 +53,8 @@ pub fn order_to_hit(
     }
     Some(Hit {
         item_name: item_name.clone(),
-        platinum: order.platinum as u32,
-        quantity: order.quantity as u32,
+        platinum: order.platinum.cast_unsigned(),
+        quantity: order.quantity.cast_unsigned(),
         ducats: *ducats,
     })
 }
@@ -63,9 +63,9 @@ pub fn print_user_hits(
     username: &str,
     hits: &[Hit],
 ) {
-    let total_qty: u32 = hits.iter().map(|h| h.quantity).sum();
-    let total_plat: u32 = hits.iter().map(|h| h.platinum * h.quantity).sum();
-    let total_ducats: u32 = hits.iter().map(|h| h.ducats * h.quantity).sum();
+    let total_qty: u32 = hits.iter().map(|hit| hit.quantity).sum();
+    let total_plat: u32 = hits.iter().map(|hit| hit.platinum * hit.quantity).sum();
+    let total_ducats: u32 = hits.iter().map(|hit| hit.ducats * hit.quantity).sum();
     let total_ratio = total_ducats as f32 / total_plat as f32;
     eprintln!(
         "👤 {username} — {total_qty} items, {total_plat}{PLATINUM} total, ~{total_ducats} ducats, {total_ratio} ducats/{PLATINUM}",
@@ -74,7 +74,12 @@ pub fn print_user_hits(
 
     let item_parts: Vec<String> = hits
         .iter()
-        .map(|h| format!("{}x {} ({}{PLATINUM})", h.quantity, h.item_name, h.platinum))
+        .map(|hit| {
+            format!(
+                "{}x {} ({}{PLATINUM})",
+                hit.quantity, hit.item_name, hit.platinum
+            )
+        })
         .collect();
 
     let message = format!(
@@ -83,7 +88,7 @@ pub fn print_user_hits(
         item_parts.join(", ")
     );
 
-    if message.len() > 255 {
+    if message.len() > 0x00ff {
         eprintln!(
             "  ⚠  Message is {} chars — Warframe may truncate it.",
             message.len()
@@ -92,9 +97,9 @@ pub fn print_user_hits(
     println!("[{}]: {message}", timestamp());
 }
 
-pub fn without_bans<'a>(
-    qualified: &'a [(String, Vec<Hit>)],
+pub fn without_bans(
+    qualified: &[(String, Vec<Hit>)],
     bans: HashSet<String>,
-) -> impl Iterator<Item = &'a (String, Vec<Hit>)> + 'a {
+) -> impl Iterator<Item = &(String, Vec<Hit>)> + '_ {
     qualified.iter().filter(move |item| !bans.contains(&item.0))
 }

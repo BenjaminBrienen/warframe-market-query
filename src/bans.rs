@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    fmt::Write,
+    fmt::Write as _,
     fs,
     path::PathBuf,
 };

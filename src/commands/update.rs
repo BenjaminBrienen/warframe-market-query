@@ -21,7 +21,7 @@ use crate::{
 };
 
 pub async fn run(
-    arguments: UpdateArguments,
+    arguments: &UpdateArguments,
     client: &RateLimitedClient,
 ) -> Result<()> {
     // Quick single-call endpoints
@@ -40,11 +40,11 @@ pub async fn run(
     // Dropsource targets
     let prime_parts: Vec<_> = items
         .iter()
-        .filter(|i| positive_ducats(i.ducats).is_some())
+        .filter(|item| positive_ducats(item.ducats).is_some())
         .collect();
     let relics: Vec<_> = items
         .iter()
-        .filter(|i| i.tags.contains(&"relic".to_string()))
+        .filter(|item| item.tags.contains(&"relic".to_owned()))
         .collect();
 
     eprintln!(
@@ -56,13 +56,13 @@ pub async fn run(
     // Combine into one target list; deduplicate by slug just in case.
     let mut targets: Vec<&models::ItemShort> = Vec::new();
     for item in prime_parts.iter().chain(relics.iter()) {
-        if !targets.iter().any(|t| t.slug == item.slug) {
+        if !targets.iter().any(|target| target.slug == item.slug) {
             targets.push(item);
         }
     }
 
     let to_fetch: Vec<_> = if arguments.force {
-        targets.to_vec()
+        targets.clone()
     } else {
         targets
             .iter()
@@ -83,8 +83,8 @@ pub async fn run(
             eta_secs(to_fetch.len())
         );
 
-        for (i, item) in to_fetch.iter().enumerate() {
-            log_progress(i + 1, to_fetch.len(), "fetched");
+        for (index, item) in to_fetch.iter().enumerate() {
+            log_progress(index + 1, to_fetch.len(), "fetched");
             match api::get_dropsources(client, &item.slug).await {
                 Ok(sources) => {
                     drop(cache::write(&cache::dropsources_path(&item.slug), &sources));

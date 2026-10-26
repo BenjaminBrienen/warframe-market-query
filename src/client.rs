@@ -70,12 +70,15 @@ impl RateLimitedClient {
     }
 
     /// Authenticated POST with a JSON body. The caller inspects the status.
-    pub async fn post_json<B: Serialize + ?Sized>(
+    pub async fn post_json<Body>(
         &self,
         path: &str,
         token: &str,
-        body: &B,
-    ) -> Result<Response> {
+        body: &Body,
+    ) -> Result<Response>
+    where
+        Body: Serialize + ?Sized,
+    {
         self.wait_for_slot().await;
 
         let response = self

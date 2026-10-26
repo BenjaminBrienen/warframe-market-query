@@ -5,12 +5,12 @@ use anyhow::{
     anyhow,
 };
 use futures_util::{
-    SinkExt,
-    StreamExt,
+    SinkExt as _,
+    StreamExt as _,
 };
 use tokio_tungstenite::tungstenite::{
     Message,
-    client::IntoClientRequest,
+    client::IntoClientRequest as _,
 };
 
 use crate::{
@@ -31,7 +31,7 @@ use crate::{
 const WS_URL: &str = "wss://ws.warframe.market/socket";
 
 pub async fn run(
-    arguments: ListenArguments,
+    arguments: &ListenArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -73,8 +73,17 @@ pub async fn run(
 
     while let Some(raw) = websocket.next().await {
         match listen_one(raw, &items_by_id, arguments.ratio) {
-            Ok(true) => continue,
-            Ok(false) | Err(_) => break,
+            Ok(true) => {
+                // successful listen
+            },
+            Ok(false) => {
+                // intentionally stopping listening
+                break;
+            },
+            Err(_) => {
+                // failed to listen
+                break;
+            },
         }
     }
 
@@ -89,10 +98,10 @@ fn listen_one(
     filter_ratio: f32,
 ) -> Result<bool> {
     let raw = match raw {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("[{}]: ⚠  WebSocket error: {e}", timestamp());
-            return Err(anyhow!("WebSocket error: {e}"));
+        Ok(message) => message,
+        Err(error) => {
+            eprintln!("[{}]: ⚠  WebSocket error: {error}", timestamp());
+            return Err(anyhow!("WebSocket error: {error}"));
         },
     };
 
@@ -103,19 +112,23 @@ fn listen_one(
             eprintln!("[{}]: 🔌 Server closed the connection.", timestamp());
             return Ok(false);
         },
-        _ => return Ok(true),
-    };
-
-    let message: serde_json::Value = match serde_json::from_str(&text) {
-        Ok(value) => value,
-        Err(_) => {
-            eprintln!("[{}]: ⚠️  message text is not JSON: {text}", timestamp());
+        Message::Binary(_) | Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {
             return Ok(true);
         },
     };
 
+    let message: serde_json::Value = if let Ok(value) = serde_json::from_str(&text) {
+        value
+    } else {
+        eprintln!("[{}]: ⚠️  message text is not JSON: {text}", timestamp());
+        return Ok(true);
+    };
+
     // Only handle new-order events.
-    let route = message.get("route").and_then(|r| r.as_str()).unwrap_or("");
+    let route = message
+        .get("route")
+        .and_then(|route| route.as_str())
+        .unwrap_or("");
     // ignorable messages
     if matches!(
         route,
@@ -138,15 +151,14 @@ fn listen_one(
         );
         return Ok(true);
     };
-    let order: models::OrderWithUser = match serde_json::from_value(payload.clone()) {
-        Ok(o) => o,
-        Err(_) => {
-            eprintln!(
-                "[{}]: ⚠️  failed to deserialize response: {payload:?}",
-                timestamp()
-            );
-            return Ok(true);
-        },
+    let order: models::OrderWithUser = if let Ok(order) = serde_json::from_value(payload.clone()) {
+        order
+    } else {
+        eprintln!(
+            "[{}]: ⚠️  failed to deserialize response: {payload}",
+            timestamp(),
+        );
+        return Ok(true);
     };
 
     // --- Filters ---
@@ -181,15 +193,15 @@ fn listen_one(
 
     // --- Output ---
     let msg_out = format!(
-        "/w {} Hi! I'd like to buy: 1x {} ({}{PLATINUM}) (warframe.market via wfmq)",
-        order.user.ingame_name, item_name, order.platinum,
+        "/w {} Hi! I'd like to buy: 1x {item_name} ({}{PLATINUM}) (warframe.market via wfmq)",
+        order.user.ingame_name, order.platinum,
     );
 
     sound::play();
 
     println!(
-        "🔔 {} | {}{PLATINUM} | {:.0} ducats/{PLATINUM} | x{} available | {}",
-        item_name, order.platinum, order_ratio, order.quantity, order.user.ingame_name,
+        "🔔 {item_name} | {}{PLATINUM} | {order_ratio:.0} ducats/{PLATINUM} | x{} available | {}",
+        order.platinum, order.quantity, order.user.ingame_name,
     );
     println!("[{}]:    {msg_out}\n", timestamp());
     Ok(true)
