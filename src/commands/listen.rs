@@ -15,7 +15,7 @@ use tokio_tungstenite::tungstenite::{
 
 use crate::{
     bans,
-    cli::ListenArgs,
+    cli::ListenArguments,
     client::RateLimitedClient,
     config::Config,
     data::DataStore,
@@ -31,7 +31,7 @@ use crate::{
 const WS_URL: &str = "wss://ws.warframe.market/socket";
 
 pub async fn run(
-    args: ListenArgs,
+    arguments: ListenArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -45,7 +45,7 @@ pub async fn run(
         "[{}]: 🪙  {} prime items with ducat values loaded. Ratio filter: ≥{}",
         timestamp(),
         items_by_id.len(),
-        args.ratio
+        arguments.ratio
     );
 
     // Build WebSocket handshake request with the mandatory `wfm` sub-protocol.
@@ -55,7 +55,7 @@ pub async fn run(
         .insert("Sec-WebSocket-Protocol", "wfm".parse()?);
 
     eprintln!("[{}]: 🔌 Connecting to {WS_URL} ...", timestamp());
-    let (mut ws, _) = tokio_tungstenite::connect_async(request).await?;
+    let (mut websocket, _) = tokio_tungstenite::connect_async(request).await?;
     eprintln!("[{}]: ✅ Connected. Waiting for orders...\n", timestamp());
 
     // Subscribe to new-order events.
@@ -67,10 +67,12 @@ pub async fn run(
         },
         "id": "wfmq-listen-1"
     });
-    ws.send(Message::Text(sub.to_string().into())).await?;
+    websocket
+        .send(Message::Text(sub.to_string().into()))
+        .await?;
 
-    while let Some(raw) = ws.next().await {
-        match listen_one(raw, &items_by_id, args.ratio) {
+    while let Some(raw) = websocket.next().await {
+        match listen_one(raw, &items_by_id, arguments.ratio) {
             Ok(true) => continue,
             Ok(false) | Err(_) => break,
         }
@@ -104,7 +106,7 @@ fn listen_one(
         _ => return Ok(true),
     };
 
-    let msg: serde_json::Value = match serde_json::from_str(&text) {
+    let message: serde_json::Value = match serde_json::from_str(&text) {
         Ok(value) => value,
         Err(_) => {
             eprintln!("[{}]: ⚠️  message text is not JSON: {text}", timestamp());
@@ -113,7 +115,7 @@ fn listen_one(
     };
 
     // Only handle new-order events.
-    let route = msg.get("route").and_then(|r| r.as_str()).unwrap_or("");
+    let route = message.get("route").and_then(|r| r.as_str()).unwrap_or("");
     // ignorable messages
     if matches!(
         route,
@@ -129,8 +131,11 @@ fn listen_one(
         return Ok(true);
     }
 
-    let Some(payload) = msg.get("payload") else {
-        eprintln!("[{}]: ⚠️  response is missing payload: {msg}", timestamp());
+    let Some(payload) = message.get("payload") else {
+        eprintln!(
+            "[{}]: ⚠️  response is missing payload: {message}",
+            timestamp()
+        );
         return Ok(true);
     };
     let order: models::OrderWithUser = match serde_json::from_value(payload.clone()) {

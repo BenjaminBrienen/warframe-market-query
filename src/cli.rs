@@ -18,60 +18,60 @@ pub struct Cli {
 pub enum Commands {
     /// Refresh the local static-data cache (items, locations, missions, dropsources).
     /// Run this the first time and after major game updates.
-    Update(UpdateArgs),
+    Update(UpdateArguments),
 
     /// Search sell/buy orders by price, quantity, and item tags.
-    Search(SearchArgs),
+    Search(SearchArguments),
 
     /// Find sellers who have enough ducat-efficient items to justify one trade slot.
-    Ducats(DucatsArgs),
+    Ducats(DucatsArguments),
 
     /// Show the best mission locations/rotations for farming ducats.
     /// Requires the cache to be populated first (`wfmq update`).
-    Locations(LocationsArgs),
+    Locations(LocationsArguments),
 
     /// Connect to the warframe.market WebSocket and print matching orders live.
-    Listen(ListenArgs),
+    Listen(ListenArguments),
 
     /// Find out what is worth trading from the user for ducats.
-    UserDucats(UserArgs),
+    UserDucats(UserArguments),
 
     /// Create a buy order (qty 99) for every ducat item:
     /// 45 ducats → 2p, 100 ducats → 5p, more than 100 ducats → 6p.
-    BuyOrders(BuyOrdersArgs),
+    BuyOrders(BuyOrdersArguments),
 
     /// Test sound effect.
     PlaySound(()),
 
     /// Ban a user (do not want to trade with them).
-    Ban(BanArgs),
+    Ban(BanArguments),
 
     /// Unban a user.
-    Unban(BanArgs),
+    Unban(BanArguments),
 }
 
 #[derive(Args)]
-pub struct BanArgs {
+pub struct BanArguments {
     /// Username of the user to ban.
     pub username: String,
 }
 
 #[derive(Args)]
-pub struct UpdateArgs {
+pub struct UpdateArguments {
     /// Re-fetch dropsource files even when they are already cached.
     #[arg(long)]
     pub force: bool,
 }
 
 #[derive(Args)]
-pub struct ListenArgs {
+pub struct ListenArguments {
     /// Minimum ducats-per-platinum ratio a live order must meet to be reported.
     #[arg(long)]
     pub ratio: f32,
 }
 
 #[derive(Args)]
-pub struct SearchArgs {
+pub struct SearchArguments {
     #[arg(long = "type", default_value = "sell")]
     pub r#type: String,
 
@@ -92,7 +92,7 @@ pub struct SearchArgs {
 }
 
 #[derive(Args)]
-pub struct DucatsArgs {
+pub struct DucatsArguments {
     /// Minimum ducats-per-platinum ratio.  E.g. --ratio 15 → ≥15 ducats/platinum.
     #[arg(long)]
     pub ratio: f32,
@@ -107,7 +107,7 @@ pub struct DucatsArgs {
 }
 
 #[derive(Args)]
-pub struct UserArgs {
+pub struct UserArguments {
     /// Username (slug) of the user. Also the "profile".
     #[arg(long)]
     pub username: String,
@@ -118,14 +118,14 @@ pub struct UserArgs {
 }
 
 #[derive(Args)]
-pub struct LocationsArgs {
+pub struct LocationsArguments {
     /// Number of results to display.
     #[arg(long, default_value = "25")]
     pub limit: usize,
 }
 
 #[derive(Args)]
-pub struct BuyOrdersArgs {
+pub struct BuyOrdersArguments {
     /// Print the orders that would be created without sending anything.
     #[arg(long)]
     pub dry_run: bool,

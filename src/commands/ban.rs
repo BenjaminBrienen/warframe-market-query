@@ -2,13 +2,13 @@ use anyhow::Result;
 
 use crate::{
     bans,
-    cli::BanArgs,
+    cli::BanArguments,
 };
 
-pub fn ban(args: BanArgs) -> Result<()> {
-    bans::add(&args.username)
+pub fn ban(arguments: BanArguments) -> Result<()> {
+    bans::add(&arguments.username)
 }
 
-pub fn unban(args: BanArgs) -> Result<()> {
-    bans::remove(&args.username)
+pub fn unban(arguments: BanArguments) -> Result<()> {
+    bans::remove(&arguments.username)
 }

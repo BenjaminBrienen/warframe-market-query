@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
     bans,
-    cli::DucatsArgs,
+    cli::DucatsArguments,
     client::RateLimitedClient,
     config::Config,
     data::DataStore,
@@ -22,7 +22,7 @@ use crate::{
 };
 
 pub async fn run(
-    args: DucatsArgs,
+    arguments: DucatsArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -40,7 +40,7 @@ pub async fn run(
         "[{}]: 🪙  Scanning {} ducat items at ratio ≥{} (~{:.0}s)...",
         timestamp(),
         ducat_items.len(),
-        args.ratio,
+        arguments.ratio,
         eta_secs(ducat_items.len())
     );
 
@@ -62,13 +62,13 @@ pub async fn run(
             if order.r#type != "sell" {
                 continue;
             }
-            if order.user.status != "ingame" && !args.include_offline {
+            if order.user.status != "ingame" && !arguments.include_offline {
                 continue;
             }
             if order.platinum == 0 {
                 continue;
             }
-            if (ducats as f32 / order.platinum as f32) < args.ratio {
+            if (ducats as f32 / order.platinum as f32) < arguments.ratio {
                 continue;
             }
             by_seller
@@ -85,7 +85,7 @@ pub async fn run(
 
     let mut qualified: Vec<(String, Vec<Hit>)> = by_seller
         .into_iter()
-        .filter(|(_, hits)| hits.iter().map(|h| h.quantity).sum::<u32>() >= args.quantity)
+        .filter(|(_, hits)| hits.iter().map(|h| h.quantity).sum::<u32>() >= arguments.quantity)
         .collect();
 
     // Sort by weighted ducat efficiency descending.

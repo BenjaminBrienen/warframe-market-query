@@ -8,7 +8,7 @@ use crate::{
         self,
         OrderOutcome,
     },
-    cli::BuyOrdersArgs,
+    cli::BuyOrdersArguments,
     client::RateLimitedClient,
     config::Config,
     data::DataStore,
@@ -40,7 +40,7 @@ pub fn price_for_ducats(ducats: u32) -> Option<u32> {
 }
 
 pub async fn run(
-    args: BuyOrdersArgs,
+    arguments: BuyOrdersArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -74,7 +74,7 @@ pub async fn run(
         planned.len(),
     );
 
-    if args.dry_run {
+    if arguments.dry_run {
         for (item, ducats, platinum) in &planned {
             println!(
                 "{} ({ducats} ducats): buy {QUANTITY}x @ {platinum}{PLATINUM}",

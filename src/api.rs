@@ -45,12 +45,12 @@ pub async fn get_dropsources(
     client: &RateLimitedClient,
     slug: &str,
 ) -> Result<Vec<DropSource>> {
-    let resp = client
+    let response = client
         .get(&format!("/v1/items/{slug}/dropsources"))
         .await?
         .json::<V1DropSourcesResponse>()
         .await?;
-    Ok(resp.payload.dropsources)
+    Ok(response.payload.dropsources)
 }
 
 pub async fn get_orders_by_item(

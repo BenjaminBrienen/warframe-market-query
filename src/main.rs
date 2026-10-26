@@ -28,18 +28,24 @@ async fn main() -> Result<()> {
     let client = RateLimitedClient::new();
 
     match cli.command {
-        Commands::Update(args) => commands::update::run(args, &client).await,
-        Commands::Search(args) => commands::search::run(args, &client, &config).await,
-        Commands::Ducats(args) => commands::ducats::run(args, &client, &config).await,
-        Commands::Locations(args) => commands::locations::run(args, &client, &config).await,
-        Commands::Listen(args) => commands::listen::run(args, &client, &config).await,
-        Commands::UserDucats(args) => commands::user_ducats::run(args, &client, &config).await,
-        Commands::BuyOrders(args) => commands::buy_orders::run(args, &client, &config).await,
+        Commands::Update(arguments) => commands::update::run(arguments, &client).await,
+        Commands::Search(arguments) => commands::search::run(arguments, &client, &config).await,
+        Commands::Ducats(arguments) => commands::ducats::run(arguments, &client, &config).await,
+        Commands::Locations(arguments) => {
+            commands::locations::run(arguments, &client, &config).await
+        },
+        Commands::Listen(arguments) => commands::listen::run(arguments, &client, &config).await,
+        Commands::UserDucats(arguments) => {
+            commands::user_ducats::run(arguments, &client, &config).await
+        },
+        Commands::BuyOrders(arguments) => {
+            commands::buy_orders::run(arguments, &client, &config).await
+        },
         Commands::PlaySound(()) => {
             sound::play();
             Ok(())
         },
-        Commands::Ban(args) => commands::ban::ban(args),
-        Commands::Unban(args) => commands::ban::unban(args),
+        Commands::Ban(arguments) => commands::ban::ban(arguments),
+        Commands::Unban(arguments) => commands::ban::unban(arguments),
     }
 }

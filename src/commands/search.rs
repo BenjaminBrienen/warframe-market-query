@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::{
     bans,
-    cli::SearchArgs,
+    cli::SearchArguments,
     client::RateLimitedClient,
     config::Config,
     data::DataStore,
@@ -15,13 +15,13 @@ use crate::{
 };
 
 pub async fn run(
-    args: SearchArgs,
+    arguments: SearchArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
     let store = DataStore::new(client, config);
 
-    let required_tags: Vec<String> = args
+    let required_tags: Vec<String> = arguments
         .tags
         .as_deref()
         .map(|t| t.split(',').map(|s| s.trim().to_lowercase()).collect())
@@ -57,19 +57,19 @@ pub async fn run(
         };
 
         for order in &orders {
-            if order.user.status != "ingame" && !args.include_offline {
+            if order.user.status != "ingame" && !arguments.include_offline {
                 continue;
             }
             if bans::get().contains(&order.user.ingame_name) {
                 continue;
             }
-            if order.r#type != args.r#type {
+            if order.r#type != arguments.r#type {
                 continue;
             }
-            if args.platinum.is_some_and(|max| order.platinum > max) {
+            if arguments.platinum.is_some_and(|max| order.platinum > max) {
                 continue;
             }
-            if args.quantity.is_some_and(|min| order.quantity < min) {
+            if arguments.quantity.is_some_and(|min| order.quantity < min) {
                 continue;
             }
 

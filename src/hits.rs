@@ -24,9 +24,7 @@ pub struct Hit {
 }
 
 /// item_id → (display name, ducats) for every item that is worth ducats.
-pub async fn items_with_ducats(
-    store: &DataStore<'_>
-) -> Result<HashMap<String, (String, u32)>> {
+pub async fn items_with_ducats(store: &DataStore<'_>) -> Result<HashMap<String, (String, u32)>> {
     let items = store.items().await?;
     let items_by_id = items
         .iter()
@@ -79,19 +77,19 @@ pub fn print_user_hits(
         .map(|h| format!("{}x {} ({}{PLATINUM})", h.quantity, h.item_name, h.platinum))
         .collect();
 
-    let msg = format!(
+    let message = format!(
         "/w {} Hi! I'd like to buy: {} (warframe.market via wfmq)",
         username_quoted(username),
         item_parts.join(", ")
     );
 
-    if msg.len() > 255 {
+    if message.len() > 255 {
         eprintln!(
             "  ⚠  Message is {} chars — Warframe may truncate it.",
-            msg.len()
+            message.len()
         );
     }
-    println!("[{}]: {msg}", timestamp());
+    println!("[{}]: {message}", timestamp());
 }
 
 pub fn without_bans<'a>(

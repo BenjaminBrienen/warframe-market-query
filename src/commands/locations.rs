@@ -11,7 +11,7 @@ use crate::{
         RelicValue,
     },
     cache,
-    cli::LocationsArgs,
+    cli::LocationsArguments,
     client::RateLimitedClient,
     config::Config,
     data::DataStore,
@@ -20,7 +20,7 @@ use crate::{
 };
 
 pub async fn run(
-    args: LocationsArgs,
+    arguments: LocationsArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -90,11 +90,11 @@ pub async fn run(
     eprintln!(
         "[{}]: 🏆 Showing top {} of {} location/rotation combinations (intact relics):\n",
         timestamp(),
-        args.limit.min(total),
+        arguments.limit.min(total),
         total
     );
 
-    for score in resolved.iter().take(args.limit) {
+    for score in resolved.iter().take(arguments.limit) {
         println!(
             "[{}]: {}",
             timestamp(),

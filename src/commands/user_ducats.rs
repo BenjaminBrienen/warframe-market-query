@@ -5,7 +5,7 @@ use anyhow::{
 
 use crate::{
     bans,
-    cli::UserArgs,
+    cli::UserArguments,
     client::RateLimitedClient,
     config::Config,
     data::DataStore,
@@ -22,7 +22,7 @@ use crate::{
 };
 
 pub async fn run(
-    args: UserArgs,
+    arguments: UserArguments,
     client: &RateLimitedClient,
     config: &Config,
 ) -> Result<()> {
@@ -36,10 +36,10 @@ pub async fn run(
         "[{}]: 🪙  {} prime items with ducat values loaded. Ratio filter: ≥{}",
         timestamp(),
         items_by_id.len(),
-        args.ratio
+        arguments.ratio
     );
 
-    let cursed_user_slug = ingame_name_to_user_slug_hack(&args.username);
+    let cursed_user_slug = ingame_name_to_user_slug_hack(&arguments.username);
     let user = match store.user(&cursed_user_slug).await {
         Ok(o) => o,
         Err(e) => {
@@ -55,8 +55,8 @@ pub async fn run(
         );
         return Ok(());
     }
-    if bans::get().contains(&args.username) {
-        eprintln!("  ⚠  User {} is banned!", args.username);
+    if bans::get().contains(&arguments.username) {
+        eprintln!("  ⚠  User {} is banned!", arguments.username);
     }
     let orders = match store.orders_by_user(&user.slug).await {
         Ok(o) => o,
@@ -67,16 +67,16 @@ pub async fn run(
     };
     let hits: Vec<_> = orders
         .iter()
-        .filter_map(|order| order_to_hit(&items_by_id, order, args.ratio))
+        .filter_map(|order| order_to_hit(&items_by_id, order, arguments.ratio))
         .collect();
     if hits.is_empty() {
         eprintln!(
             "[{}]: Nothing to buy from user {} with the given criteria.",
             timestamp(),
-            args.username
+            arguments.username
         );
     } else {
-        print_user_hits(&args.username, &hits);
+        print_user_hits(&arguments.username, &hits);
     }
     Ok(())
 }

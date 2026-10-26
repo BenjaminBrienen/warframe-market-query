@@ -66,14 +66,16 @@ pub fn build_relic_values(
             continue;
         };
 
-        for src in sources {
-            if src.r#type != "relic" {
+        for source in sources {
+            if source.r#type != "relic" {
                 continue;
             }
-            let Some(ref relic_id) = src.relic else {
+            let Some(ref relic_id) = source.relic else {
                 continue;
             };
-            let Some(ref rates) = src.rates else { continue };
+            let Some(ref rates) = source.rates else {
+                continue;
+            };
 
             contents.entry(relic_id.clone()).or_default().push((
                 ducats,
@@ -142,20 +144,20 @@ pub fn build_mission_scores(
             continue;
         };
 
-        for src in sources {
-            if src.r#type != "mission" {
+        for source in sources {
+            if source.r#type != "mission" {
                 continue;
             }
-            let Some(ref loc_id) = src.location else {
+            let Some(ref loc_id) = source.location else {
                 continue;
             };
-            let Some(ref mis_id) = src.mission else {
+            let Some(ref mis_id) = source.mission else {
                 continue;
             };
-            let Some(rate) = src.rate else { continue };
+            let Some(rate) = source.rate else { continue };
 
             // Normalise rotation to uppercase for consistent grouping.
-            let rotation = src.rotation.as_deref().map(|r| r.to_uppercase());
+            let rotation = source.rotation.as_deref().map(|r| r.to_uppercase());
             let key = (loc_id.clone(), mis_id.clone(), rotation);
 
             *scores.entry(key).or_default() += rate / 100.0 * value.intact;
@@ -192,12 +194,12 @@ pub fn format_score(
     locations: &HashMap<String, Location>,
     missions: &HashMap<String, Mission>,
 ) -> String {
-    let loc = locations.get(&score.location_id);
+    let location = locations.get(&score.location_id);
     let mis = missions.get(&score.mission_id);
 
-    let system = loc.and_then(|l| l.system_name()).unwrap_or("?");
+    let system = location.and_then(|l| l.system_name()).unwrap_or("?");
 
-    let node = loc
+    let node = location
         .and_then(|l| l.node_name())
         .unwrap_or(score.location_id.as_str());
 

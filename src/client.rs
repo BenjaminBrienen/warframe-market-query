@@ -57,7 +57,7 @@ impl RateLimitedClient {
     ) -> Result<Response> {
         self.wait_for_slot().await;
 
-        let resp = self
+        let response = self
             .inner
             .get(format!("{BASE_URL}{path}"))
             .header("Language", "en")
@@ -66,7 +66,7 @@ impl RateLimitedClient {
             .send()
             .await?;
 
-        Ok(resp)
+        Ok(response)
     }
 
     /// Authenticated POST with a JSON body. The caller inspects the status.
@@ -78,7 +78,7 @@ impl RateLimitedClient {
     ) -> Result<Response> {
         self.wait_for_slot().await;
 
-        let resp = self
+        let response = self
             .inner
             .post(format!("{BASE_URL}{path}"))
             .header("Language", "en")
@@ -89,6 +89,6 @@ impl RateLimitedClient {
             .send()
             .await?;
 
-        Ok(resp)
+        Ok(response)
     }
 }

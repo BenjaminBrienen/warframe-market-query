@@ -6,7 +6,7 @@ use crate::{
     analysis,
     api,
     cache,
-    cli::UpdateArgs,
+    cli::UpdateArguments,
     client::RateLimitedClient,
     models::{
         self,
@@ -21,7 +21,7 @@ use crate::{
 };
 
 pub async fn run(
-    args: UpdateArgs,
+    arguments: UpdateArguments,
     client: &RateLimitedClient,
 ) -> Result<()> {
     // Quick single-call endpoints
@@ -61,7 +61,7 @@ pub async fn run(
         }
     }
 
-    let to_fetch: Vec<_> = if args.force {
+    let to_fetch: Vec<_> = if arguments.force {
         targets.to_vec()
     } else {
         targets
