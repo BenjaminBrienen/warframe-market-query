@@ -14,9 +14,7 @@ use crate::models::{
     Mission,
 };
 
-// ---------------------------------------------------------------------------
 // Intermediate / cached output
-// ---------------------------------------------------------------------------
 
 /// Expected ducat yield per relic opened at each refinement level.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -26,10 +24,6 @@ pub struct RelicValue {
     pub flawless: f32,
     pub radiant: f32,
 }
-
-// ---------------------------------------------------------------------------
-// Step 1
-// ---------------------------------------------------------------------------
 
 type RelicProbabilities = (u32, f32, f32, f32, f32);
 
@@ -97,10 +91,6 @@ pub fn build_relic_values(
         })
         .collect()
 }
-
-// ---------------------------------------------------------------------------
-// Step 2
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
 pub struct MissionScore {
@@ -171,10 +161,6 @@ pub fn build_mission_scores(
 
     result
 }
-
-// ---------------------------------------------------------------------------
-// Formatting
-// ---------------------------------------------------------------------------
 
 pub fn format_score(
     score: &MissionScore,

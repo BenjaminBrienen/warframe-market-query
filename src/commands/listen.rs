@@ -161,7 +161,7 @@ fn listen_one(
         return Ok(true);
     };
 
-    // --- Filters ---
+    // Filters
     if order.r#type != "sell" {
         return Ok(true);
     }
@@ -191,7 +191,7 @@ fn listen_one(
         return Ok(true);
     }
 
-    // --- Output ---
+    // Output
     let msg_out = format!(
         "/w {} Hi! I'd like to buy: 1x {item_name} ({}{PLATINUM}) (warframe.market via wfmq)",
         order.user.ingame_name, order.platinum,

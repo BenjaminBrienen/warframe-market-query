@@ -20,9 +20,7 @@ use serde::{
     de::DeserializeOwned,
 };
 
-// ---------------------------------------------------------------------------
 // Path helpers
-// ---------------------------------------------------------------------------
 
 pub fn items_path() -> PathBuf {
     PathBuf::from("data/items.json")
@@ -53,9 +51,7 @@ pub fn user_path(slug: &str) -> PathBuf {
     PathBuf::from(format!("data/user/{slug}.json"))
 }
 
-// ---------------------------------------------------------------------------
 // Core operations
-// ---------------------------------------------------------------------------
 
 /// Deserialise a cached JSON file. Returns `None` if the file is absent or
 /// malformed (caller decides whether that warrants a warning).

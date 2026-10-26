@@ -40,7 +40,7 @@ impl<'state> DataStore<'state> {
         Self { client, config }
     }
 
-    // ---- Static data -------------------------------------------------------
+    // Static data
 
     pub async fn items(&self) -> Result<Vec<ItemShort>> {
         let path = cache::items_path();
@@ -82,7 +82,7 @@ impl<'state> DataStore<'state> {
         cache::read(&cache::dropsources_path(slug))
     }
 
-    // ---- Dynamic data (TTL-based) ------------------------------------------
+    // Dynamic data (TTL-based)
 
     pub async fn orders_by_item(
         &self,
