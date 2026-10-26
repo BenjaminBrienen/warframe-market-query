@@ -87,10 +87,10 @@ pub async fn run(
             log_progress(i + 1, to_fetch.len(), "fetched");
             match api::get_dropsources(client, &item.slug).await {
                 Ok(sources) => {
-                    let _ = cache::write(&cache::dropsources_path(&item.slug), &sources);
+                    drop(cache::write(&cache::dropsources_path(&item.slug), &sources));
                 },
-                Err(e) => {
-                    eprintln!("[{}]:   ⚠ {} — {e}", timestamp(), item.slug);
+                Err(error) => {
+                    eprintln!("[{}]:   ⚠ {} — {error}", timestamp(), item.slug);
                 },
             }
         }

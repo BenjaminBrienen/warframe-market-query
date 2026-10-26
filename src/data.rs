@@ -27,15 +27,15 @@ use crate::{
     },
 };
 
-pub struct DataStore<'a> {
-    client: &'a RateLimitedClient,
-    config: &'a Config,
+pub struct DataStore<'state> {
+    client: &'state RateLimitedClient,
+    config: &'state Config,
 }
 
-impl<'a> DataStore<'a> {
+impl<'state> DataStore<'state> {
     pub fn new(
-        client: &'a RateLimitedClient,
-        config: &'a Config,
+        client: &'state RateLimitedClient,
+        config: &'state Config,
     ) -> Self {
         Self { client, config }
     }
@@ -48,7 +48,7 @@ impl<'a> DataStore<'a> {
             return Ok(cached);
         }
         let data = api::get_items(self.client).await?;
-        let _ = cache::write(&path, &data);
+        drop(cache::write(&path, &data));
         Ok(data)
     }
 
@@ -58,7 +58,7 @@ impl<'a> DataStore<'a> {
             return Ok(cached);
         }
         let data = api::get_locations(self.client).await?;
-        let _ = cache::write(&path, &data);
+        drop(cache::write(&path, &data));
         Ok(data)
     }
 
@@ -68,7 +68,7 @@ impl<'a> DataStore<'a> {
             return Ok(cached);
         }
         let data = api::get_missions(self.client).await?;
-        let _ = cache::write(&path, &data);
+        drop(cache::write(&path, &data));
         Ok(data)
     }
 
@@ -94,7 +94,7 @@ impl<'a> DataStore<'a> {
             }
         }
         let data = api::get_orders_by_item(self.client, slug).await?;
-        let _ = cache::write(&path, &data);
+        drop(cache::write(&path, &data));
         Ok(data)
     }
 
@@ -109,7 +109,7 @@ impl<'a> DataStore<'a> {
             }
         }
         let data = api::get_orders_by_user(self.client, slug).await?;
-        let _ = cache::write(&path, &data);
+        drop(cache::write(&path, &data));
         Ok(data)
     }
 
@@ -124,7 +124,7 @@ impl<'a> DataStore<'a> {
             }
         }
         let data = api::get_user(self.client, slug).await?;
-        let _ = cache::write(&path, &data);
+        drop(cache::write(&path, &data));
         Ok(data)
     }
 }
