@@ -9,6 +9,9 @@ pub struct Config {
     /// How many minutes an orders cache file stays valid before re-fetching.
     pub orders_cache_minutes: u64,
 
+    /// Whether to use the cached user-order information.
+    pub cache_user_orders: bool,
+
     /// Session JWT read from `auth.txt`, needed for commands that change
     /// your account (`buy-orders`). Never read from `wfmq.json`.
     #[serde(skip)]
@@ -19,6 +22,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             orders_cache_minutes: 5,
+            cache_user_orders: false,
             auth_token: None,
         }
     }

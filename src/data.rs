@@ -102,9 +102,11 @@ impl<'state> DataStore<'state> {
     pub async fn orders_by_user(
         &self,
         slug: &str,
+        cache_user_orders: bool,
     ) -> Result<Vec<Order>> {
         let path = cache::orders_user_path(slug);
-        if cache::is_fresh(&path, self.config.orders_cache_minutes)
+        if cache_user_orders
+            && cache::is_fresh(&path, self.config.orders_cache_minutes)
             && let Some(cached) = cache::read(&path)
         {
             return Ok(cached);

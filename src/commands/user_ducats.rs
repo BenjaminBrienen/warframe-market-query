@@ -58,7 +58,10 @@ pub async fn run(
     if bans::get().contains(&arguments.username) {
         eprintln!("  ⚠  User {} is banned!", arguments.username);
     }
-    let orders = match store.orders_by_user(&user.slug).await {
+    let orders = match store
+        .orders_by_user(&user.slug, config.cache_user_orders)
+        .await
+    {
         Ok(order) => order,
         Err(error) => {
             eprintln!("[{}]:   ⚠ {error}", timestamp());
